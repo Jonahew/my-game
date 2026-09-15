@@ -1,0 +1,11 @@
+import assert from 'node:assert/strict';
+import {Garden,ground,gems} from './dist/logic.js';
+const g=new Garden();g.start();for(let i=0;i<60;i++)g.step(1/60,{z:1});assert(g.z>2&&g.y===0);
+g.pause();const time=g.time;g.step(.05,{x:1});assert.equal(g.time,time);g.start();
+g.step(.016,{jump:true});assert(g.y>0);for(let i=0;i<100;i++)g.step(.016);assert.equal(g.y,0);
+g.x=gems[0][0];g.z=gems[0][1];g.step(.016);assert.equal(g.collected.size,1);g.step(.016);assert.equal(g.collected.size,1);
+g.x=40;g.z=40;for(let i=0;i<70;i++)g.step(.016);assert.equal(g.lives,2);assert.equal(g.collected.size,1);assert(g.x===0&&g.z===-2);
+for(const [x,z] of gems){g.x=x;g.z=z;g.y=0;g.step(.016);}assert.equal(g.collected.size,6);g.x=14;g.z=16;g.step(.016);assert.equal(g.mode,'won');g.start();assert.equal(g.lives,3);assert.equal(g.collected.size,0);
+g.damage();g.damage();g.damage();assert.equal(g.mode,'lost');g.start();assert.equal(g.mode,'playing');
+for(let x=0;x<=14;x+=.1)assert(ground(x,0));for(let z=0;z<=14;z+=.1)assert(ground(0,z));assert(!ground(7,7));
+console.log('PASS: movement, jumping/landing, pause, one-time pickups, fall recovery, retained progress, victory, defeat, restart and connected paths.');
