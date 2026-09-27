@@ -63,8 +63,8 @@ function chime(freq, duration = 0.3, type = 'sine') {
   } catch (e) {}
 }
 
-// Helper to instantiate cloned GLB models with shadow casting
-function model(name, x, y, z, height = 0) {
+// Helper to create cloned GLB models with shadow casting
+function createModel(name, x, y, z, height = 0) {
   const root = new THREE.Group();
   if (!models[name]) return root;
   const o = models[name].clone(true);
@@ -82,6 +82,12 @@ function model(name, x, y, z, height = 0) {
     }
   });
   root.position.set(x, y, z);
+  return root;
+}
+
+// Helper to create level-bound models that are cleared on level changes
+function model(name, x, y, z, height = 0) {
+  const root = createModel(name, x, y, z, height);
   levelGroup.add(root);
   return root;
 }
@@ -173,10 +179,18 @@ function buildLevelScene(levelId) {
   const patrolStart = getPatrolPositions(level, 0);
   droneModels = patrolStart.map(p => model('Drone', p.x, p.y, p.z, 0.65));
 
-  // 7. Update Hero Position
-  if (hero) {
+  // 7. Update Hero Position & ensure hero is attached to scene
+  if (!hero) {
+    hero = createModel('Explorer', state.x, state.y, state.z, 1.65);
+    hero.rotation.y = Math.PI;
+    scene.add(hero);
+  } else {
+    if (hero.parent !== scene) {
+      scene.add(hero);
+    }
     hero.position.set(state.x, state.y, state.z);
     hero.rotation.y = Math.PI;
+    hero.visible = true;
   }
 
   // 8. Rebuild Developer Collision Shapes
@@ -539,8 +553,9 @@ async function init() {
   }));
 
   // Build Player Explorer
-  hero = model('Explorer', 0, 0, -2, 1.65);
+  hero = createModel('Explorer', 0, 0, -2, 1.65);
   hero.rotation.y = Math.PI;
+  scene.add(hero);
 
   // Invulnerability shield aura mesh
   const shieldGeo = new THREE.SphereGeometry(0.85, 16, 12);
