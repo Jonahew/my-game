@@ -165,19 +165,18 @@ function applyCosmeticsToModel(characterGroup) {
 
   // 2. Apply Visor & Optics Glow Color
   const visorItem = getCosmetic(eq.visor);
-  if (visorItem && visorItem.glowColor) {
-    characterGroup.traverse(node => {
-      if (node.isMesh && node.material) {
-        if (node.name.includes('Glow') || node.material.name === 'Glow') {
-          node.material = node.material.clone();
-          node.material.color = new THREE.Color(visorItem.glowColor);
-          if (node.material.emissive) {
-            node.material.emissive = new THREE.Color(visorItem.glowColor);
-          }
+  const visorGlowHex = visorItem?.glowColor || '#ffae33';
+  characterGroup.traverse(node => {
+    if (node.isMesh && node.material) {
+      if (node.name.includes('Glow') || node.material.name === 'Glow') {
+        node.material = node.material.clone();
+        node.material.color = new THREE.Color(visorGlowHex);
+        if (node.material.emissive) {
+          node.material.emissive = new THREE.Color(visorGlowHex);
         }
       }
-    });
-  }
+    }
+  });
 
   // 3. Remove existing modular attachments
   const toRemove = [];
@@ -186,30 +185,197 @@ function applyCosmeticsToModel(characterGroup) {
   });
   toRemove.forEach(c => characterGroup.remove(c));
 
-  // 4. Attach Headpiece / Antenna
+  // 4. Attach 3D Visor Optics Shield (physically contoured to helmet temples and face)
+  if (visorItem) {
+    const visorGroup = new THREE.Group();
+    visorGroup.userData.isAttachment = true;
+    const visorColor = new THREE.Color(visorGlowHex);
+
+    // Side temple hinge pivots connected directly into helmet ear nodes
+    const hingeMat = new THREE.MeshStandardMaterial({ color: 0x1f2630, roughness: 0.4, metalness: 0.8 });
+    const hingeGeo = new THREE.CylinderGeometry(0.038, 0.038, 0.06, 12);
+    const hingeL = new THREE.Mesh(hingeGeo, hingeMat);
+    hingeL.rotation.z = Math.PI / 2;
+    hingeL.position.set(-0.47, 1.13, 0.08);
+    const hingeR = new THREE.Mesh(hingeGeo, hingeMat);
+    hingeR.rotation.z = Math.PI / 2;
+    hingeR.position.set(0.47, 1.13, 0.08);
+    visorGroup.add(hingeL, hingeR);
+
+    // Contoured visor side arms following helmet curvature
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x242d38, roughness: 0.4, metalness: 0.6 });
+    const armGeo = new THREE.BoxGeometry(0.032, 0.040, 0.28);
+    const armL = new THREE.Mesh(armGeo, armMat);
+    armL.position.set(-0.42, 1.14, 0.21);
+    armL.rotation.y = -0.22;
+    const armR = new THREE.Mesh(armGeo, armMat);
+    armR.position.set(0.42, 1.14, 0.21);
+    armR.rotation.y = 0.22;
+    visorGroup.add(armL, armR);
+
+    // Front brow frame resting across forehead
+    const browGeo = new THREE.BoxGeometry(0.72, 0.038, 0.05);
+    const browMesh = new THREE.Mesh(browGeo, armMat);
+    browMesh.position.set(0, 1.22, 0.35);
+    visorGroup.add(browMesh);
+
+    // Curved HUD optical glass lens shield
+    const lensGeo = new THREE.CylinderGeometry(0.39, 0.39, 0.16, 24, 1, true, -Math.PI * 0.38, Math.PI * 0.76);
+    const lensMat = new THREE.MeshStandardMaterial({
+      color: visorColor,
+      emissive: visorColor,
+      emissiveIntensity: 0.45,
+      transparent: true,
+      opacity: 0.65,
+      roughness: 0.1,
+      metalness: 0.2,
+      side: THREE.DoubleSide
+    });
+    const lensMesh = new THREE.Mesh(lensGeo, lensMat);
+    lensMesh.position.set(0, 1.14, 0.06);
+    visorGroup.add(lensMesh);
+
+    characterGroup.add(visorGroup);
+  }
+
+  // 5. Toggle built-in beacon antenna visibility and Attach Custom Headpiece / Antenna
+  characterGroup.traverse(node => {
+    if (node.name === 'Teal005' || node.name === 'Glow002') {
+      node.visible = (eq.antenna === 'antenna_default');
+    }
+  });
+
   const antennaItem = getCosmetic(eq.antenna);
-  if (antennaItem && antennaItem.modelName && models[antennaItem.modelName]) {
-    const headgear = createModel(antennaItem.modelName, 0, 1.78, 0, 0.45);
-    headgear.userData.isAttachment = true;
-    characterGroup.add(headgear);
+  if (antennaItem && eq.antenna !== 'antenna_default') {
+    const headGroup = new THREE.Group();
+    headGroup.userData.isAttachment = true;
+
+    // Solid mounting collar and gimbal anchoring firmly into the helmet crown at y = 1.35
+    const collarMat = new THREE.MeshStandardMaterial({ color: 0x1c232d, roughness: 0.4, metalness: 0.85 });
+    const collarGeo = new THREE.CylinderGeometry(0.06, 0.075, 0.04, 14);
+    const collar = new THREE.Mesh(collarGeo, collarMat);
+    collar.position.set(0, 1.36, 0);
+    headGroup.add(collar);
+
+    const stemGeo = new THREE.CylinderGeometry(0.022, 0.022, 0.05, 10);
+    const stem = new THREE.Mesh(stemGeo, collarMat);
+    stem.position.set(0, 1.40, 0);
+    headGroup.add(stem);
+
+    if (antennaItem.modelName && models[antennaItem.modelName]) {
+      // Anchored directly onto the mounting gimbal at y = 1.40 with zero floating gap
+      const headgear = createModel(antennaItem.modelName, 0, 1.40, 0, 0.34);
+      headGroup.add(headgear);
+    } else {
+      // Procedural telemetry antennas for other unlocked styles
+      if (eq.antenna === 'antenna_solar_mast') {
+        const mastGeo = new THREE.CylinderGeometry(0.018, 0.018, 0.30, 8);
+        const mast = new THREE.Mesh(mastGeo, collarMat);
+        mast.position.set(0, 1.55, 0);
+        const camGeo = new THREE.BoxGeometry(0.11, 0.07, 0.09);
+        const cam = new THREE.Mesh(camGeo, collarMat);
+        cam.position.set(0, 1.70, 0.03);
+        const lensGeo = new THREE.CylinderGeometry(0.025, 0.025, 0.04, 10);
+        const lens = new THREE.Mesh(lensGeo, new THREE.MeshBasicMaterial({ color: 0xff334b }));
+        lens.rotation.x = Math.PI / 2;
+        lens.position.set(0, 1.70, 0.08);
+        headGroup.add(mast, cam, lens);
+      } else if (eq.antenna === 'antenna_storm_coils') {
+        for (const x of [-0.07, 0.07]) {
+          const coilGeo = new THREE.CylinderGeometry(0.016, 0.016, 0.25, 8);
+          const coil = new THREE.Mesh(coilGeo, collarMat);
+          coil.position.set(x, 1.52, 0);
+          const tipGeo = new THREE.SphereGeometry(0.035, 8, 8);
+          const tip = new THREE.Mesh(tipGeo, new THREE.MeshBasicMaterial({ color: 0xc742ff }));
+          tip.position.set(x, 1.65, 0);
+          headGroup.add(coil, tip);
+        }
+      } else if (eq.antenna === 'antenna_axial') {
+        const sweptGeo = new THREE.CylinderGeometry(0.018, 0.01, 0.34, 8);
+        const swept = new THREE.Mesh(sweptGeo, collarMat);
+        swept.rotation.z = 0.45;
+        swept.rotation.x = -0.2;
+        swept.position.set(0.07, 1.54, -0.04);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), new THREE.MeshBasicMaterial({ color: 0x2bf7ff }));
+        tip.position.set(0.16, 1.68, -0.08);
+        headGroup.add(swept, tip);
+      } else if (eq.antenna === 'antenna_frost') {
+        for (const x of [-0.08, 0.08]) {
+          const spikeGeo = new THREE.ConeGeometry(0.028, 0.28, 6);
+          const spike = new THREE.Mesh(spikeGeo, new THREE.MeshStandardMaterial({ color: 0xd4ebf7, roughness: 0.1, metalness: 0.4 }));
+          spike.rotation.z = x > 0 ? -0.18 : 0.18;
+          spike.position.set(x, 1.52, 0);
+          headGroup.add(spike);
+        }
+      }
+    }
+    characterGroup.add(headGroup);
   }
 
-  // 5. Attach Backpack Gear
+  // 6. Attach Backpack Gear (firmly mounted on the BACK of the suit, -Z direction)
   const backpackItem = getCosmetic(eq.backpack);
-  if (backpackItem && backpackItem.modelName && models[backpackItem.modelName]) {
-    const pack = createModel(backpackItem.modelName, 0, 0.42, 0.28, 0.55);
-    pack.userData.isAttachment = true;
-    characterGroup.add(pack);
+  if (backpackItem) {
+    const packGroup = new THREE.Group();
+    packGroup.userData.isAttachment = true;
+
+    if (backpackItem.modelName && models[backpackItem.modelName]) {
+      // Model packs (RoverPack, CloudPack, FrostPack)
+      // Centered on back torso at Z = -0.26, Y = 0.25 (height 0.46)
+      const packModel = createModel(backpackItem.modelName, 0, 0, 0, 0.46);
+      packGroup.add(packModel);
+    } else {
+      // Procedural packs for items without prebaked GLB (Explorer Pack default, Lunar, Saturn, Uranus, Neptune)
+      const packBodyGeo = new THREE.BoxGeometry(0.32, 0.36, 0.14);
+      const packBodyMat = new THREE.MeshStandardMaterial({
+        color: eq.backpack === 'backpack_lunar' ? 0xd0d8e4 :
+               eq.backpack === 'backpack_saturn' ? 0xe2ba48 :
+               eq.backpack === 'backpack_uranus' ? 0x4ac8d0 :
+               eq.backpack === 'backpack_neptune' ? 0x1d4cb8 : 0x242e3a,
+        roughness: 0.5,
+        metalness: 0.3
+      });
+      const packBody = new THREE.Mesh(packBodyGeo, packBodyMat);
+      packBody.position.set(0, 0.18, 0);
+      packGroup.add(packBody);
+
+      // Detail canisters / energy cells
+      const cellGeo = new THREE.CylinderGeometry(0.042, 0.042, 0.30, 10);
+      const cellMat = new THREE.MeshStandardMaterial({
+        color: eq.backpack === 'backpack_lunar' ? 0x8899aa :
+               eq.backpack === 'backpack_saturn' ? 0xffd166 :
+               eq.backpack === 'backpack_uranus' ? 0x2bf7ff :
+               eq.backpack === 'backpack_neptune' ? 0x3b70ff : 0x12a39a,
+        emissive: eq.backpack === 'backpack_default' ? 0x05403c : 0x112233,
+        roughness: 0.3
+      });
+      const cellL = new THREE.Mesh(cellGeo, cellMat);
+      cellL.position.set(-0.10, 0.18, -0.06);
+      const cellR = new THREE.Mesh(cellGeo, cellMat);
+      cellR.position.set(0.10, 0.18, -0.06);
+      packGroup.add(cellL, cellR);
+    }
+
+    // Shoulder harness straps mounting pack to body
+    const strapMat = new THREE.MeshStandardMaterial({ color: 0x182028, roughness: 0.7 });
+    const strapGeo = new THREE.BoxGeometry(0.04, 0.26, 0.24);
+    const strapL = new THREE.Mesh(strapGeo, strapMat);
+    strapL.position.set(-0.15, 0.18, 0.10);
+    const strapR = new THREE.Mesh(strapGeo, strapMat);
+    strapR.position.set(0.15, 0.18, 0.10);
+    packGroup.add(strapL, strapR);
+
+    // Position securely on the BACK (-Z direction, Z = -0.26, Y = 0.25)
+    packGroup.position.set(0, 0.25, -0.26);
+    characterGroup.add(packGroup);
   }
 
-  // 6. Attach Suit Badge
+  // 7. Attach Suit Badge (firmly on the front chest lapel, +Z direction)
   const badgeItem = getCosmetic(eq.badge);
   if (badgeItem && badgeItem.icon && badgeItem.id !== 'badge_default') {
     const badgeGeo = new THREE.CircleGeometry(0.065, 16);
     const badgeMat = new THREE.MeshBasicMaterial({ color: 0xffd166, side: THREE.DoubleSide });
     const badgeMesh = new THREE.Mesh(badgeGeo, badgeMat);
-    badgeMesh.position.set(0.12, 0.88, -0.29);
-    badgeMesh.rotation.y = Math.PI;
+    badgeMesh.position.set(0.12, 0.62, 0.26);
     badgeMesh.userData.isAttachment = true;
     characterGroup.add(badgeMesh);
   }
@@ -1226,6 +1392,9 @@ async function init() {
 
   window.state = state;
   window.hero = hero;
+  window.previewHero = previewHero;
+  window.models = models;
+  window.applyCosmeticsToModel = applyCosmeticsToModel;
   window.buildLevelScene = buildLevelScene;
   window.begin = begin;
 
