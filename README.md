@@ -1,64 +1,137 @@
-# Crystal Garden — Iteration 2
+# Crystal Garden — Solar System Adventure
 
-Static browser 3D game using all 13 models from the original Unity/Blender project, converted to GLB with Blender 4.2. Powered by Three.js with zero build step, fully compatible with Vercel and standard static web hosts.
+An expansive 3D browser adventure built on the original *Crystal Garden* project. The player pilots a customizable Explorer across an 8-destination sequential Solar System campaign, recovering energy crystals, evading location-specific robotic inhabitants, and activating ancient warp portals.
 
-Serve `dist` over HTTP. No installation or build is required. The Three.js renderer and GLTF loader are vendored locally with their license.
+Powered by Three.js with zero build step, fully compatible with Vercel and standard static web hosts.
 
-## Iteration 2 Improvements
+---
 
-1. **Fair UFO & Sentinel Hitboxes**:
-   - Replaced oversized 2D bounding radius with true 3D body collision calculations closely matching the visible UFO saucer and explorer torso.
-   - Borderline contact slightly favors the player.
-   - Accounts for vertical separation: safely jumping over or walking below elevated patrols does not cause damage.
-   - Prevents a single encounter from removing multiple lives.
-   - Grants approximately 2 seconds of invulnerability after damage with clear visual feedback (blinking character + luminous energy shield aura + HUD indicator).
-   - Configurable collision shapes, patrol speeds, and invulnerability duration via `COLLISION_CONFIG`.
-   - **Developer Collision Overlay**: Press **O** or click the `Overlay: Off/ON` button in the HUD to display real-time 3D wireframe hitboxes (player cylinder, footprint support ring, UFO saucer shapes, island perimeters, and bridge deck boundaries) along with a live debug stats panel.
+## 🚀 8-Destination Sequential Campaign
 
-2. **Continuous Bridge & Island Collisions**:
-   - Fixed ground detection mismatch where players could fall through bridge edges while still standing on the deck.
-   - Bridge collision covers the entire visible deck (2.0 unit width) and connects continuously with island collisions (radius 6.0) with zero gaps.
-   - Multi-point footprint support calculation ($R = 0.28$) keeps the player supported when standing or walking near edges.
-   - Genuine falls remain possible when moving beyond the supported footprint without artificial invisible walls.
-   - Platform rendering and collision surfaces are generated from shared level definitions (`dist/levels.js`).
+Following an authentic outward route from Earth's celestial sanctuary:
 
-3. **Level Map & Progression System**:
-   - Complete gameplay loop: Level map → Select unlocked level → Collect all crystals → Awaken portal → Enter portal → Complete level → Unlock next level.
-   - Interactive Celestial Archipelago map with floating garden islands and progression pathways.
-   - Distinct states for each level: **Locked** 🔒 (with explanation of unlock requirement), **Unlocked** ✦ (playable), and **Completed** ✓ (with best completion time displayed).
-   - Level Detail Card displaying name, subtitle, description, crystal count, and Play / Replay button.
-   - Level Completion screen displaying recovered crystals, completion time, best time, and announcing newly unlocked levels.
-   - Grand Adventure-Complete screen celebrating the restoration of all three gardens upon completing Level 3.
-   - Map accessible from start screen, pause menu, victory screens, and HUD / keyboard shortcut (**M**).
+| Level | Destination | Environment & Celestial Landmarks | Gravity | Robotic Inhabitant & Behavior |
+|:---:|:---|:---|:---:|:---|
+| **1** | **Crystal Garden** | Floating garden sanctuaries, ancient stone bridges, and sky islands | $g=20\,\text{m/s}^2$ | **UFO Patrols**: Balanced elliptical flyovers with fair 3D saucer hitboxes and vertical clearance. |
+| **2** | **Moon** | Desolate gray regolith, impact craters, boulders, and bright Earthrise in the black sky | $g=10\,\text{m/s}^2$ *(Low)* | **Lunar Hoppers**: Mechanical jumpers that project pulsating ground target decals before leaping and slamming down. |
+| **3** | **Mars** | Rust-red oxidised dunes, canyons, rocks, and silhouettes of Olympus Mons | $g=16\,\text{m/s}^2$ | **Survey Rovers**: Autonomous rovers projecting sweeping yellow scanning cones, sounding alarms and initiating high-speed pursuit on detection. |
+| **4** | **Jupiter** | High-altitude floating research platforms suspended above violent cloud bands and the Great Red Spot *(strictly orbital platforms; no solid planetary ground)* | $g=20\,\text{m/s}^2$ | **Storm Drones**: Electro-static drones that hover, charge energy with electric crackles, and discharge expanding shock rings. |
+| **5** | **Saturn** | Sleek orbital gantries directly overlooking Saturn's expansive icy rings and shadow gradients | $g=20\,\text{m/s}^2$ | **Ring Skimmers**: Aerodynamic orbital crafts swooping along illuminated curved arcs with visible flight path ribbons. |
+| **6** | **Uranus** | Aerostat scientific outposts suspended over pale cyan hydrogen-methane cloud decks with vertical ring planes | $g=18\,\text{m/s}^2$ | **Wind Sentinels**: Rotorcrafts that telegraph directional air vortices before firing pushing wind gusts. |
+| **7** | **Neptune** | Deep azure stations floating over supersonic atmospheric storms and dark storm vortices | $g=20\,\text{m/s}^2$ | **Tempest Hunters**: Sleek interceptors that lock on, flash danger beams, and perform high-speed directional dashes with long recovery cool-downs. |
+| **8** | **Pluto** | Ancient nitrogen ice plains, towering jagged water-ice peaks, distant pinprick Sun, and deep Kuiper Belt space *(accurately designated as a dwarf planet)* | $g=8\,\text{m/s}^2$ *(Ultra-Low)* | **Frost Crawlers**: Cryogenic quadrupeds that lay glowing, temporary slippery ice patches that alter traction. |
 
-4. **Three Playable Levels**:
-   - **Level 1 — Crystal Garden**: The classic 4-island square layout with 6 crystals, corrected collisions, and balanced bridge patrols.
-   - **Level 2 — Skyway Crossing**: A 5-island zigzag archipelago with deliberate, readable UFO patrol rhythms and 6 crystals.
-   - **Level 3 — The Far Garden**: A grand 6-island celestial garden with branching routes, 7 crystals, and the apex summit portal.
+---
 
-5. **Versioned Storage & Persistence**:
-   - Stores unlocked levels, completed levels, and best completion times in browser `localStorage` (`crystal_garden_save_v2`).
-   - Resilient error handling for restricted, disabled, or corrupted storage.
-   - Restarting a level attempt resets only the current run without wiping unlocked levels.
-   - Includes "Reset Progress" with confirmation modal.
+## 🎨 Modular Explorer Customization
 
-## Controls
+Accessible from the main menu, pause menu, and solar system map (**Key G** or **Customize** button):
 
-- **WASD / Arrows**: Move explorer
-- **Space**: Jump
-- **Shift**: Run (speed boost)
-- **Mouse / Pointer Drag**: Orbit third-person camera
-- **Escape / P**: Pause game
-- **M**: Open / close Level Map
-- **O**: Toggle Developer Collision Overlay
-- **R**: Restart level (when won or lost)
-- **Touch**: On-screen directional d-pad and jump button on touch devices
+- **6 Cosmetic Categories**:
+  - **Body Finishes**: Standard Garden, Lunar Regolith, Martian Ochre, Jovian Amber, Cassini Gold, Aquamarine Glaze, Abyssal Azure, Cryo Frost.
+  - **Visor Glows**: Amber Glow, Lunar Blue, Scanner Crimson, Storm Electric, Solar Aurora, Deep Void.
+  - **Headgear**: Beacon Antenna, Satellite Dish, Ring Crown.
+  - **Backpacks**: Explorer Pack, Rover Unit, Cloud Collector, Insulated Pack.
+  - **Suit Badges**: Standard Insignia, Earthrise Badge, Olympus Badge, Great Spot Insignia, Ring Badge, Voyager Badge, Dwarf Planet Crest, Flawless Crown.
+  - **Particle Trails**: None, Lunar Dust, Martian Sands, Lightning Sparks, Saturnian Stardust, Ice Crystals.
+- **Interactive 3D Turntable**:
+  - Live 3D character viewport rendered with Three.js.
+  - Drag-to-rotate preview with smooth dampening.
+  - Live equipment readout and equipped badge indicators.
+- **Fair Gameplay Unlocks (No Paywalls or RNG)**:
+  - 100% deterministic progression unlocks:
+    - **World Completion**: Beat a destination to unlock its native planetary finish and basic gear.
+    - **Hidden Relics**: Uncover hidden navigation beacons located in optional off-path exploration routes.
+    - **Speedrun Challenges**: Beat target par completion times.
+    - **Flawless Victory**: Complete levels without losing a single heart.
+  - Restore Default option to quickly revert to original attire.
 
-## Validation & Testing
+---
 
-- Automated tests: `node verify.mjs` validates core physics, bridge edges, footprint support, fair UFO collisions, vertical clearance, invulnerability, multi-level progression, and storage resilience.
-- Browser test: `node browser_gameplay_test.mjs` executes full automated browser gameplay flows via Playwright.
+## 🗺️ Solar System Navigation Map
 
-## Vercel Deployment
+- **Full Campaign Route Map**: Responsive interactive SVG orbital map displaying all 8 worlds.
+- **Mission Briefing Dossiers**: Selecting any world opens its full operational briefing:
+  - Atmospheric & gravitational data.
+  - Crystal quota and mission overview.
+  - Robotic inhabitant profile with tactical evasion advice.
+  - Challenge progress medals (Completed, Flawless, Speedrun, Relic).
+  - Cosmetic rewards unlocked and remaining.
+  - Direct Play / Replay deployment.
 
-Import the repository root into Vercel. `vercel.json` serves the `dist` directory with zero build requirements.
+---
+
+## 🛡️ Fair Physics & Collision Mechanics
+
+- **Fair Robotic Hitboxes**:
+  - 3D bounding geometry closely tailored to visual meshes.
+  - Borderline contact favors the player.
+  - Vertical clearance allows jumping over ground attacks or running beneath elevated drones.
+  - Every attack features: **Visible Warning (Telegraph)** $\rightarrow$ **Evasion Window** $\rightarrow$ **Active Hazard** $\rightarrow$ **Recovery / Cooldown Period**.
+  - 2-second invulnerability on damage with shield aura and character flash to prevent multi-hit deaths.
+- **Continuous Surface Navigation**:
+  - Gapless bridge-to-island collision meshes.
+  - Multi-point footprint support ($R = 0.28$) keeps the player grounded when near borders.
+  - Deliberate fall detection when stepping off edges without invisible walls.
+- **Low-Gravity Physics**:
+  - Moon ($g=10$) and Pluto ($g=8$) offer floaty, responsive leaping while keeping horizontal momentum tightly controllable.
+  - Dynamic camera scaling smoothly pulls back on low-gravity worlds to maintain sightlines.
+- **Developer Collision Overlay**:
+  - Press **O** or click `Overlay: Off/ON` in the HUD to reveal real-time wireframe volumes for the Explorer cylinder, robot hitboxes, telegraph circles, ice patches, and platform bounds.
+
+---
+
+## 💾 Versioned Storage & Data Portability
+
+- Stored in browser `localStorage` under `crystal_garden_save_v3`.
+- Seamless automatic migration from `crystal_garden_save_v2` and `v1` preserving all completed stages.
+- Graceful degradation if `localStorage` is disabled or blocked.
+- Independent **Reset Equipped Appearance** and **Reset All Progression** (with confirmation dialog).
+
+---
+
+## 🎮 Controls
+
+| Action | Keyboard / Mouse | Touch Controls |
+|:---|:---|:---|
+| **Move** | `W`, `A`, `S`, `D` or Arrow Keys | On-screen virtual D-Pad |
+| **Jump** | `Spacebar` | On-screen Jump button |
+| **Sprint** | `Shift` (hold) | Automatic with full D-Pad deflection |
+| **Camera Orbit** | Click & Drag Mouse / Trackpad | Touch Drag on screen background |
+| **Customize Gear** | `G` or Gear button | Tap Gear button in HUD / Pause Menu |
+| **Solar Map** | `M` or Map button | Tap Map button in HUD |
+| **Pause / Resume** | `Escape` or `P` | Tap Pause button in HUD |
+| **Collision Overlay** | `O` | Tap Overlay button in HUD |
+| **Restart Level** | `R` (when completed or fallen) | Tap Restart button on modal |
+
+---
+
+## 📦 Asset Credits & Provenance
+
+1. **Original Unity/Blender Models (Blender 4.2 GLTF/GLB)**:
+   - `Island1.glb`, `Island2.glb`, `Island3.glb`, `Island4.glb`
+   - `Bridge.glb`, `Arch.glb`, `Bench.glb`, `Fence.glb`, `Shrub.glb`
+   - `Crystal.glb`, `Portal.glb`, `UFO.glb`
+   - Original Character: `Character.glb`
+2. **Solar Campaign Models (Blender 5.1 Procedural GLB Assets)**:
+   - Enemies: `Hopper.glb`, `Rover.glb`, `StormDrone.glb`, `RingSkimmer.glb`, `WindSentinel.glb`, `TempestHunter.glb`, `FrostCrawler.glb`
+   - Exploration: `Relic.glb` (Hidden Solar Artifact)
+   - Cosmetics: `AntennaDish.glb`, `RingCrown.glb`, `RoverPack.glb`, `CloudPack.glb`, `FrostPack.glb`
+3. **Libraries**:
+   - Three.js r128 (MIT License, vendored in `dist/three.min.js`)
+   - GLTFLoader (MIT License, vendored in `dist/GLTFLoader.js`)
+
+---
+
+## 🧪 Testing & Verification
+
+- **Unit & Logic Suite**:
+  ```bash
+  node verify.mjs
+  ```
+  Validates all 8 destinations, dynamic gravity formulas, robotic enemy telegraph timing, cosmetic unlock evaluation, and storage migrations.
+- **End-to-End Headless Browser Test**:
+  ```bash
+  node browser_gameplay_test.mjs
+  ```
+  Launches Playwright Firefox against a local server, verifying canvas rendering, character movement, low-gravity jumping, hazard collisions, damage invulnerability, solar map navigation, and cosmetics modal interactions.

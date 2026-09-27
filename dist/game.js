@@ -7,8 +7,19 @@ import {
   isLevelCompleted,
   unlockLevel,
   recordCompletion,
-  resetProgress
+  resetProgress,
+  resetAppearance,
+  resetAllProgression,
+  equipCosmetic,
+  unlockCosmetic
 } from './storage.js';
+import {
+  COSMETICS,
+  COSMETIC_CATEGORIES,
+  getCosmetic,
+  getCosmeticsByCategory,
+  evaluateRewards
+} from './cosmetics.js';
 
 // DOM selector shorthand
 const $ = id => document.getElementById(id);
@@ -20,17 +31,22 @@ const state = new Garden(currentLevelId);
 const keys = new Set();
 
 // Three.js Core Variables
-let renderer, scene, camera, sun;
-let hero, heroShield, portalGem, portalFrame;
-let levelGroup, collisionDebugGroup;
-let gemModels = [], droneModels = [];
+let renderer, scene, camera, sun, hemiLight;
+let hero, heroShield, portalGem, portalFrame, relicModel;
+let levelGroup, collisionDebugGroup, backdropGroup, particlesGroup;
+let gemModels = [], enemyModels = [], icePatchMeshes = [];
 let yaw = Math.PI + 0.25, pitch = 0.58;
 let started = false, drag = null, jump = false;
-let audio, sound = false, noticeTimer;
+let audio, sound = false, noticeTimer, rewardToastTimer;
 let previousMode = 'ready';
 let debugOverlayEnabled = false;
 let newlyUnlockedLevel = null;
 let selectedMapLevel = 1;
+let currentCustomCategory = 'body';
+
+// 3D Preview Turntable Variables
+let previewRenderer, previewScene, previewCamera, previewHero;
+let previewYaw = 0.4, previewPitch = 0.2, previewDrag = null;
 
 const models = {};
 const clock = new THREE.Clock();
@@ -42,6 +58,29 @@ function message(text, duration = 2800) {
   notice.classList.add('show');
   clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => notice.classList.remove('show'), duration);
+}
+
+function showRewardToast(item) {
+  $('toast-item-name').textContent = item.name;
+  $('toast-item-desc').textContent = item.description;
+  const toast = $('reward-toast');
+  toast.classList.remove('hidden');
+
+  $('toast-equip-btn').onclick = () => {
+    equipCosmetic(item.category, item.id);
+    applyCosmeticsToModel(hero);
+    applyCosmeticsToModel(previewHero);
+    renderCustomizationCatalog();
+    toast.classList.add('hidden');
+    message(`Equipped ${item.name}!`);
+  };
+
+  $('toast-later-btn').onclick = () => {
+    toast.classList.add('hidden');
+  };
+
+  clearTimeout(rewardToastTimer);
+  rewardToastTimer = setTimeout(() => toast.classList.add('hidden'), 7000);
 }
 
 // Audio Chime Synthesizer
@@ -94,9 +133,196 @@ function model(name, x, y, z, height = 0) {
 
 // Format seconds into MM:SS
 function formatTime(secs) {
+  if (secs === undefined || secs === null) return '—';
   const m = Math.floor(secs / 60);
   const s = Math.floor(secs % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const ms = Math.floor((secs % 1) * 10);
+  return `${m}:${String(s).padStart(2, '0')}.${ms}`;
+}
+
+// --- COSMETIC APPLICATION ON EXPLORER 3D MODEL ---
+function applyCosmeticsToModel(characterGroup) {
+  if (!characterGroup) return;
+  const save = loadProgress();
+  const eq = save.equippedCosmetics;
+
+  // 1. Apply Body Finish Color
+  const bodyItem = getCosmetic(eq.body);
+  if (bodyItem && bodyItem.color) {
+    characterGroup.traverse(node => {
+      if (node.isMesh && node.material) {
+        // Suit body meshes are ivory or teal
+        if (node.name.includes('Ivory') || node.material.name === 'Ivory') {
+          node.material = node.material.clone();
+          node.material.color = new THREE.Color(bodyItem.color);
+        } else if (node.name.includes('Teal') || node.material.name === 'Teal') {
+          node.material = node.material.clone();
+          node.material.color = new THREE.Color(bodyItem.accentColor || '#12a39a');
+        }
+      }
+    });
+  }
+
+  // 2. Apply Visor & Optics Glow Color
+  const visorItem = getCosmetic(eq.visor);
+  if (visorItem && visorItem.glowColor) {
+    characterGroup.traverse(node => {
+      if (node.isMesh && node.material) {
+        if (node.name.includes('Glow') || node.material.name === 'Glow') {
+          node.material = node.material.clone();
+          node.material.color = new THREE.Color(visorItem.glowColor);
+          if (node.material.emissive) {
+            node.material.emissive = new THREE.Color(visorItem.glowColor);
+          }
+        }
+      }
+    });
+  }
+
+  // 3. Remove existing modular attachments
+  const toRemove = [];
+  characterGroup.children.forEach(c => {
+    if (c.userData.isAttachment) toRemove.push(c);
+  });
+  toRemove.forEach(c => characterGroup.remove(c));
+
+  // 4. Attach Headpiece / Antenna
+  const antennaItem = getCosmetic(eq.antenna);
+  if (antennaItem && antennaItem.modelName && models[antennaItem.modelName]) {
+    const headgear = createModel(antennaItem.modelName, 0, 1.78, 0, 0.45);
+    headgear.userData.isAttachment = true;
+    characterGroup.add(headgear);
+  }
+
+  // 5. Attach Backpack Gear
+  const backpackItem = getCosmetic(eq.backpack);
+  if (backpackItem && backpackItem.modelName && models[backpackItem.modelName]) {
+    const pack = createModel(backpackItem.modelName, 0, 0.42, 0.28, 0.55);
+    pack.userData.isAttachment = true;
+    characterGroup.add(pack);
+  }
+
+  // 6. Attach Suit Badge
+  const badgeItem = getCosmetic(eq.badge);
+  if (badgeItem && badgeItem.icon && badgeItem.id !== 'badge_default') {
+    const badgeGeo = new THREE.CircleGeometry(0.065, 16);
+    const badgeMat = new THREE.MeshBasicMaterial({ color: 0xffd166, side: THREE.DoubleSide });
+    const badgeMesh = new THREE.Mesh(badgeGeo, badgeMat);
+    badgeMesh.position.set(0.12, 0.88, -0.29);
+    badgeMesh.rotation.y = Math.PI;
+    badgeMesh.userData.isAttachment = true;
+    characterGroup.add(badgeMesh);
+  }
+
+  // Update equipped labels in customization screen
+  $('eq-body-name').textContent = getCosmetic(eq.body)?.name || 'Default';
+  $('eq-visor-name').textContent = getCosmetic(eq.visor)?.name || 'Default';
+  $('eq-antenna-name').textContent = getCosmetic(eq.antenna)?.name || 'Default';
+  $('eq-backpack-name').textContent = getCosmetic(eq.backpack)?.name || 'Default';
+  $('eq-badge-name').textContent = getCosmetic(eq.badge)?.name || 'Default';
+  $('eq-trail-name').textContent = getCosmetic(eq.trail)?.name || 'None';
+}
+
+// Build Destination Celestial Backdrop & Environmental Sky
+function buildCelestialBackdrop(level) {
+  if (backdropGroup) {
+    while (backdropGroup.children.length > 0) {
+      const child = backdropGroup.children[0];
+      backdropGroup.remove(child);
+      child.geometry?.dispose();
+      child.material?.dispose();
+    }
+  }
+
+  const feature = level.theme.skyFeature;
+
+  if (feature === 'earth') {
+    // The Moon: Earth visible hanging in the black sky
+    const earthGeo = new THREE.SphereGeometry(7, 32, 24);
+    const earthMat = new THREE.MeshStandardMaterial({
+      color: 0x2266cc,
+      roughness: 0.8,
+      metalness: 0.1,
+    });
+    const earthMesh = new THREE.Mesh(earthGeo, earthMat);
+    earthMesh.position.set(-60, 48, -75);
+    backdropGroup.add(earthMesh);
+
+    // Earth atmosphere halo
+    const haloGeo = new THREE.SphereGeometry(7.4, 32, 24);
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0x8bffdf,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.25,
+    });
+    const haloMesh = new THREE.Mesh(haloGeo, haloMat);
+    haloMesh.position.copy(earthMesh.position);
+    backdropGroup.add(haloMesh);
+  } else if (feature === 'volcano') {
+    // Mars: Distant Olympus Mons silhouettes
+    for (let i = 0; i < 3; i++) {
+      const coneGeo = new THREE.ConeGeometry(24 + i * 8, 20, 16);
+      const coneMat = new THREE.MeshStandardMaterial({ color: 0x6e2c14, roughness: 0.9 });
+      const mountain = new THREE.Mesh(coneGeo, coneMat);
+      mountain.position.set(-80 + i * 70, 0, -110 - i * 20);
+      backdropGroup.add(mountain);
+    }
+  } else if (feature === 'jupiter_storm') {
+    // Jupiter: Swirling clouds below floating research station
+    const cloudGeo = new THREE.PlaneGeometry(300, 300, 16, 16);
+    const cloudMat = new THREE.MeshBasicMaterial({
+      color: 0x9e5f28,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.35,
+    });
+    const cloudMesh = new THREE.Mesh(cloudGeo, cloudMat);
+    cloudMesh.rotation.x = -Math.PI / 2;
+    cloudMesh.position.y = -18;
+    backdropGroup.add(cloudMesh);
+  } else if (feature === 'saturn_rings') {
+    // Saturn: Prominent view of Saturn and its rings
+    const saturnGeo = new THREE.SphereGeometry(18, 32, 24);
+    const saturnMat = new THREE.MeshStandardMaterial({ color: 0xd8c282, roughness: 0.7 });
+    const saturnMesh = new THREE.Mesh(saturnGeo, saturnMat);
+    saturnMesh.position.set(-65, 35, -95);
+    backdropGroup.add(saturnMesh);
+
+    const ringGeo = new THREE.RingGeometry(24, 44, 48);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffe875,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.75,
+    });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.x = Math.PI / 2.8;
+    ringMesh.rotation.y = -0.2;
+    ringMesh.position.copy(saturnMesh.position);
+    backdropGroup.add(ringMesh);
+  } else if (feature === 'uranus_rings') {
+    // Uranus: Tilted rings
+    const uranusGeo = new THREE.SphereGeometry(14, 32, 24);
+    const uranusMat = new THREE.MeshStandardMaterial({ color: 0x5cd4db, roughness: 0.6 });
+    const uranusMesh = new THREE.Mesh(uranusGeo, uranusMat);
+    uranusMesh.position.set(70, 32, -90);
+    backdropGroup.add(uranusMesh);
+
+    const ringGeo = new THREE.RingGeometry(18, 25, 48);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xaef7fc, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+    ringMesh.rotation.y = Math.PI / 2.1; // Almost 98 degree tilt!
+    ringMesh.position.copy(uranusMesh.position);
+    backdropGroup.add(ringMesh);
+  } else if (feature === 'distant_sun') {
+    // Pluto: Small distant brilliant pinprick Sun
+    const sunDotGeo = new THREE.SphereGeometry(1.6, 16, 16);
+    const sunDotMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const sunDot = new THREE.Mesh(sunDotGeo, sunDotMat);
+    sunDot.position.set(-80, 50, -110);
+    backdropGroup.add(sunDot);
+  }
 }
 
 // Build / Rebuild Level Scene from Level Definition
@@ -104,6 +330,19 @@ function buildLevelScene(levelId) {
   currentLevelId = levelId;
   const level = getLevel(levelId);
   state.loadLevel(levelId);
+
+  // Apply Environmental Lighting & Theme
+  if (scene) {
+    scene.background = new THREE.Color(level.theme.skyColor);
+    scene.fog = new THREE.Fog(level.theme.fogColor, level.theme.fogNear, level.theme.fogFar);
+  }
+  if (sun) {
+    sun.color = new THREE.Color(level.theme.sunColor);
+    sun.intensity = level.theme.sunIntensity * 3.0;
+  }
+  if (hemiLight) {
+    hemiLight.color = new THREE.Color(level.theme.ambientColor);
+  }
 
   // Clean up previous level objects from levelGroup
   if (levelGroup) {
@@ -117,44 +356,83 @@ function buildLevelScene(levelId) {
   }
 
   gemModels = [];
-  droneModels = [];
+  enemyModels = [];
+  icePatchMeshes = [];
 
-  // 1. Build Islands
+  // Build Celestial Backdrop
+  buildCelestialBackdrop(level);
+
+  // 1. Build Islands / Platforms
   for (const isl of level.islands) {
     const island = model('Island', isl.x, 0, isl.z);
     const box = new THREE.Box3().setFromObject(island);
     island.position.y -= box.max.y;
 
-    // Island natural vegetation and lamps
-    for (const dx of [-2.8, 2.8]) {
-      model('Tree', isl.x + dx, 0, isl.z + 2.5, 3.2);
-      model('Rock', isl.x + dx, 0, isl.z + 1.5, 0.65);
-    }
-    model('Bracken', isl.x - 3.1, 0, isl.z - 2, 0.7);
-    model('Bluebell', isl.x + 3.1, 0, isl.z - 2, 0.75);
-    model('Lamp', isl.x - 2, 0, isl.z - 3.1, 1.2);
+    // Apply destination platform material tinting
+    island.traverse(node => {
+      if (node.isMesh && node.material) {
+        if (node.material.name === 'Grass') {
+          node.material = node.material.clone();
+          node.material.color = new THREE.Color(level.theme.terrainColor);
+        }
+      }
+    });
 
-    // Decorative inner courtyard path
+    // Decorative natural landmarks or tech pylons
+    if (level.destinationType === 'garden') {
+      for (const dx of [-2.8, 2.8]) {
+        model('Tree', isl.x + dx, 0, isl.z + 2.5, 3.2);
+        model('Rock', isl.x + dx, 0, isl.z + 1.5, 0.65);
+      }
+      model('Bracken', isl.x - 3.1, 0, isl.z - 2, 0.7);
+      model('Bluebell', isl.x + 3.1, 0, isl.z - 2, 0.75);
+      model('Lamp', isl.x - 2, 0, isl.z - 3.1, 1.2);
+    } else {
+      // Rocky or high-tech planetary terrain
+      model('Rock', isl.x - 2.8, 0, isl.z + 2.2, 0.9);
+      model('Rock', isl.x + 2.8, 0, isl.z + 2.2, 0.8);
+      model('Lamp', isl.x - 2.2, 0, isl.z - 2.8, 1.1);
+    }
+
+    // Inner walkways
     for (let zz = -3; zz <= 3; zz++) {
       for (const xx of [-0.5, 0.5]) {
-        model('Path', isl.x + xx, 0.008, isl.z + zz, 0.08);
+        const p = model('Path', isl.x + xx, 0.008, isl.z + zz, 0.08);
+        p.traverse(n => {
+          if (n.isMesh && n.material) {
+            n.material = n.material.clone();
+            n.material.color = new THREE.Color(level.theme.pathColor);
+          }
+        });
       }
     }
   }
 
-  // 2. Build Bridges from shared definition
+  // 2. Build Bridges / Walkways from shared definition
   for (const b of level.bridges) {
     const lanes = b.lanes || [-0.5, 0.5];
     if (b.axis === 'x') {
       for (let i = b.start; i <= b.end; i++) {
         for (const lane of lanes) {
-          model('Path', i, -0.23, b.fixedCoord + lane);
+          const p = model('Path', i, -0.23, b.fixedCoord + lane);
+          p.traverse(n => {
+            if (n.isMesh && n.material) {
+              n.material = n.material.clone();
+              n.material.color = new THREE.Color(level.theme.pathColor);
+            }
+          });
         }
       }
     } else {
       for (let i = b.start; i <= b.end; i++) {
         for (const lane of lanes) {
-          model('Path', b.fixedCoord + lane, -0.23, i);
+          const p = model('Path', b.fixedCoord + lane, -0.23, i);
+          p.traverse(n => {
+            if (n.isMesh && n.material) {
+              n.material = n.material.clone();
+              n.material.color = new THREE.Color(level.theme.pathColor);
+            }
+          });
         }
       }
     }
@@ -175,11 +453,98 @@ function buildLevelScene(levelId) {
   // 5. Build Crystals
   gemModels = level.crystals.map(([x, z]) => model('Crystal', x, 0.2, z, 0.95));
 
-  // 6. Build UFO Sentinel Drones
-  const patrolStart = getPatrolPositions(level, 0);
-  droneModels = patrolStart.map(p => model('Drone', p.x, p.y, p.z, 0.65));
+  // 6. Build Hidden Planetary Relic
+  if (level.relic) {
+    relicModel = model('Relic', level.relic.x, level.relic.y, level.relic.z, 1.0);
+  }
 
-  // 7. Update Hero Position & ensure hero is attached to scene
+  // 7. Build Location-Specific Enemies
+  if (level.destinationType === 'garden') {
+    const patrolStart = getPatrolPositions(level, 0);
+    enemyModels = patrolStart.map(p => model('Drone', p.x, p.y, p.z, 0.65));
+  } else if (level.destinationType === 'moon') {
+    enemyModels = (level.hoppers || []).map(h => {
+      const m = model('Hopper', h.homeX, 0, h.homeZ, 1.35);
+      // Warning reticle mesh attached
+      const reticleGeo = new THREE.RingGeometry(h.radius - 0.2, h.radius, 32);
+      const reticleMat = new THREE.MeshBasicMaterial({ color: 0xff334b, side: THREE.DoubleSide });
+      const reticle = new THREE.Mesh(reticleGeo, reticleMat);
+      reticle.rotation.x = -Math.PI / 2;
+      reticle.position.set(h.targetX, 0.05, h.targetZ);
+      reticle.visible = false;
+      levelGroup.add(reticle);
+      m.userData.reticle = reticle;
+      return m;
+    });
+  } else if (level.destinationType === 'mars') {
+    enemyModels = (level.rovers || []).map(r => {
+      const m = model('Rover', r.base, 0, r.fixedCoord, 0.95);
+      // Sensor cone projection on ground
+      const coneGeo = new THREE.ConeGeometry(3.6, 4.2, 16);
+      const coneMat = new THREE.MeshBasicMaterial({ color: 0xff8484, transparent: true, opacity: 0.25, wireframe: true });
+      const cone = new THREE.Mesh(coneGeo, coneMat);
+      cone.rotation.x = -Math.PI / 2;
+      cone.position.set(r.base + (r.dir * 2.1), 0.05, r.fixedCoord);
+      levelGroup.add(cone);
+      m.userData.cone = cone;
+      return m;
+    });
+  } else if (level.destinationType === 'jupiter') {
+    enemyModels = (level.stormDrones || []).map(d => {
+      const m = model('StormDrone', d.x, 1.0, d.z, 1.1);
+      // Electrical expanding ring wave
+      const pulseGeo = new THREE.RingGeometry(0.1, 0.35, 32);
+      const pulseMat = new THREE.MeshBasicMaterial({ color: 0xc742ff, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+      const pulse = new THREE.Mesh(pulseGeo, pulseMat);
+      pulse.rotation.x = -Math.PI / 2;
+      pulse.position.set(d.x, 0.08, d.z);
+      levelGroup.add(pulse);
+      m.userData.pulse = pulse;
+      return m;
+    });
+  } else if (level.destinationType === 'saturn') {
+    enemyModels = (level.skimmers || []).map(sk => {
+      const m = model('RingSkimmer', sk.cx, sk.y, sk.cz, 0.65);
+      // Trajectory ribbon
+      const curveGeo = new THREE.RingGeometry(sk.rx - 0.1, sk.rx + 0.1, 48);
+      const curveMat = new THREE.MeshBasicMaterial({ color: 0xffe875, side: THREE.DoubleSide, transparent: true, opacity: 0.3 });
+      const ribbon = new THREE.Mesh(curveGeo, curveMat);
+      ribbon.rotation.x = -Math.PI / 2;
+      ribbon.position.set(sk.cx, 0.03, sk.cz);
+      levelGroup.add(ribbon);
+      return m;
+    });
+  } else if (level.destinationType === 'uranus') {
+    enemyModels = (level.sentinels || []).map(ws => {
+      const m = model('WindSentinel', ws.x, 0.8, ws.z, 1.2);
+      // Wind cone arrow
+      const arrowGeo = new THREE.ConeGeometry(1.6, ws.range, 16);
+      const arrowMat = new THREE.MeshBasicMaterial({ color: 0x5cd4db, transparent: true, opacity: 0.3, wireframe: true });
+      const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+      arrow.rotation.x = ws.dirZ > 0 ? -Math.PI / 2 : Math.PI / 2;
+      arrow.position.set(ws.x, 0.1, ws.z + (ws.dirZ * ws.range * 0.5));
+      levelGroup.add(arrow);
+      m.userData.arrow = arrow;
+      return m;
+    });
+  } else if (level.destinationType === 'neptune') {
+    enemyModels = (level.hunters || []).map(th => {
+      const m = model('TempestHunter', th.originX, 0.8, th.originZ, 0.85);
+      // Targeting laser line
+      const points = [new THREE.Vector3(th.originX, 0.2, th.originZ), new THREE.Vector3(th.targetX, 0.2, th.targetZ)];
+      const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+      const lineMat = new THREE.LineBasicMaterial({ color: 0xff334b, linewidth: 2 });
+      const line = new THREE.Line(lineGeo, lineMat);
+      levelGroup.add(line);
+      m.userData.line = line;
+      return m;
+    });
+  } else if (level.destinationType === 'pluto') {
+    const crawlerStart = getPatrolPositions(level, 0);
+    enemyModels = crawlerStart.map(p => model('FrostCrawler', p.x, p.y, p.z, 0.65));
+  }
+
+  // 8. Update Hero Position & ensure hero is attached to scene
   if (!hero) {
     hero = createModel('Explorer', state.x, state.y, state.z, 1.65);
     hero.rotation.y = Math.PI;
@@ -192,15 +557,22 @@ function buildLevelScene(levelId) {
     hero.rotation.y = Math.PI;
     hero.visible = true;
   }
+  applyCosmeticsToModel(hero);
 
-  // 8. Rebuild Developer Collision Shapes
+  // 9. Rebuild Developer Collision Shapes
   buildCollisionDebugShapes(level);
 
-  // Update HUD Level Badge
+  // Update HUD
   $('level-badge').textContent = `LVL ${level.id} · ${level.name.toUpperCase()}`;
+  $('gravity-badge').textContent = `g: ${level.gravity} m/s²`;
+  $('dbg-dest-name').textContent = level.name;
+  $('dbg-gravity').textContent = `g = ${level.gravity}.0 m/s²`;
   $('pause-level-info').textContent = `${level.name} — ${level.subtitle}`;
 
-  // Sun focus
+  // Reset relic indicator
+  $('relic-indicator').classList.add('hidden');
+
+  // Focus sun
   if (sun) {
     sun.target.position.set(level.islands[0].x + 7, 0, level.islands[0].z + 7);
   }
@@ -220,7 +592,6 @@ function buildCollisionDebugShapes(level) {
   // Materials
   const islandMat = new THREE.MeshBasicMaterial({ color: 0x3bc7b4, wireframe: true });
   const bridgeMat = new THREE.MeshBasicMaterial({ color: 0x8bffdf, wireframe: true });
-  const ufoMat = new THREE.MeshBasicMaterial({ color: 0xffd166, wireframe: true });
   const playerMat = new THREE.MeshBasicMaterial({ color: 0xff8484, wireframe: true });
   const footMat = new THREE.MeshBasicMaterial({ color: 0x8bffdf, wireframe: true });
 
@@ -258,121 +629,121 @@ function buildCollisionDebugShapes(level) {
   playerDbgMesh.name = 'debugPlayer';
   collisionDebugGroup.add(playerDbgMesh);
 
-  const footGeo = new THREE.RingGeometry(COLLISION_CONFIG.footprintRadius - 0.03, COLLISION_CONFIG.footprintRadius, 24);
-  footGeo.rotateX(-Math.PI / 2);
+  const footGeo = new THREE.RingGeometry(COLLISION_CONFIG.footprintRadius - 0.04, COLLISION_CONFIG.footprintRadius, 24);
   const footDbgMesh = new THREE.Mesh(footGeo, footMat);
+  footDbgMesh.rotation.x = -Math.PI / 2;
   footDbgMesh.name = 'debugFootprint';
   collisionDebugGroup.add(footDbgMesh);
-
-  // 4. UFO Drones Collision Cylinders
-  droneModels.forEach((_, i) => {
-    const geo = new THREE.CylinderGeometry(COLLISION_CONFIG.ufoRadius, COLLISION_CONFIG.ufoRadius, COLLISION_CONFIG.ufoHeight, 16);
-    const m = new THREE.Mesh(geo, ufoMat);
-    m.name = `debugUfo_${i}`;
-    collisionDebugGroup.add(m);
-  });
 
   collisionDebugGroup.visible = debugOverlayEnabled;
 }
 
-// Toggle Developer Collision Overlay
-function toggleCollisionOverlay(forced) {
-  debugOverlayEnabled = typeof forced === 'boolean' ? forced : !debugOverlayEnabled;
+function toggleCollisionOverlay() {
+  debugOverlayEnabled = !debugOverlayEnabled;
   if (collisionDebugGroup) {
     collisionDebugGroup.visible = debugOverlayEnabled;
   }
   const btn = $('debug-overlay-btn');
-  btn.textContent = debugOverlayEnabled ? 'Overlay: ON' : 'Overlay: Off';
-  btn.style.borderColor = debugOverlayEnabled ? '#ffd166' : 'rgba(255, 209, 102, 0.3)';
-
-  const panel = $('debug-panel');
-  if (debugOverlayEnabled) {
-    panel.classList.remove('hidden');
-    message('Developer Collision Overlay Enabled');
-  } else {
-    panel.classList.add('hidden');
-  }
+  btn.textContent = debugOverlayEnabled ? 'Overlay: On' : 'Overlay: Off';
+  btn.classList.toggle('active', debugOverlayEnabled);
+  $('debug-panel').classList.toggle('hidden', !debugOverlayEnabled);
+  chime(debugOverlayEnabled ? 650 : 420);
 }
 
-// Sync HUD and UI State
+// Update HUD & Modal DOM elements with game state
 function sync() {
-  const active = state.mode === 'playing';
-  document.body.classList.toggle('playing', active);
-
-  $('pause').disabled = !started;
-  $('pause').textContent = active ? 'Ⅱ' : '▷';
   $('energy').textContent = `◇ ${state.collected.size} / ${state.crystalCount}`;
   $('lives').textContent = '♥ '.repeat(Math.max(0, state.lives)).trim() || '—';
   $('lives').setAttribute('aria-label', `${state.lives} lives remaining`);
   $('timer').textContent = formatTime(state.time);
 
-  // Invulnerability shield HUD
-  const isInvuln = state.time < state.hurtUntil;
-  $('shield-indicator').classList.toggle('hidden', !isInvuln);
+  const invuln = state.time < state.hurtUntil;
+  $('shield-indicator').classList.toggle('hidden', !invuln);
 
-  if (state.portalActive) {
-    $('objective').textContent = 'PORTAL ACTIVE · STEP INTO THE PORTAL';
-  } else {
-    $('objective').textContent = `COLLECT ALL ${state.crystalCount} CRYSTALS`;
+  if (state.relicCollected) {
+    $('relic-indicator').classList.remove('hidden');
   }
 
-  // Handle Mode Change transitions
-  if (state.mode === previousMode) return;
-  const oldMode = previousMode;
+  const isPlaying = state.mode === 'playing';
+  $('pause').disabled = !isPlaying && state.mode !== 'paused';
+  $('pause').textContent = state.mode === 'paused' ? '▶' : 'Ⅱ';
+  document.body.classList.toggle('playing', isPlaying || state.mode === 'paused');
+
+  // Trigger win or loss dialogs
+  if (state.mode === 'won' && previousMode !== 'won') {
+    handleLevelWin();
+  } else if (state.mode === 'lost' && previousMode !== 'lost') {
+    chime(120, 0.7, 'sawtooth');
+    message('Energy depleted! Returning to start.', 3200);
+    setTimeout(() => {
+      state.start();
+      sync();
+    }, 1800);
+  }
   previousMode = state.mode;
-
-  if (state.mode === 'won') {
-    handleLevelCompletion();
-  } else if (state.mode === 'lost') {
-    $('eyebrow').textContent = 'ENERGY DEPLETED · TRY A DIFFERENT ROUTE';
-    $('heading').innerHTML = 'Signal<br><i>lost.</i>';
-    $('description').textContent = 'Your explorer ran out of energy. A fresh journey awaits.';
-    $('begin').textContent = 'Restart Level Attempt';
-    $('panel').classList.remove('hidden');
-  } else if (state.mode === 'paused') {
-    $('pause-modal').classList.remove('hidden');
-  } else if (state.mode === 'playing') {
-    $('pause-modal').classList.add('hidden');
-    $('panel').classList.add('hidden');
-    $('completion-modal').classList.add('hidden');
-  }
 }
 
-// Handle Level Victory & Progression
-function handleLevelCompletion() {
-  const completionTime = Math.round(state.time * 10) / 10;
-  recordCompletion(currentLevelId, completionTime);
+// Handle Level Victory, Challenges, and Rewards
+function handleLevelWin() {
+  const completionTime = state.time;
+  const level = state.level;
+  const currentSave = loadProgress();
 
-  // Check next level unlock
+  const stats = {
+    time: completionTime,
+    livesRemaining: state.lives,
+    relicFound: state.relicCollected,
+    targetTime: level.targetTime,
+    completed: true,
+  };
+
+  // Record completion & challenges in persistent storage
+  recordCompletion(currentLevelId, stats);
+
+  // Evaluate newly earned rewards
+  const newlyUnlockedRewards = evaluateRewards(new Set(currentSave.unlockedCosmetics), level, stats);
+  newlyUnlockedRewards.forEach(item => unlockCosmetic(item.id));
+
+  // Determine next sequential level
   let nextLevel = null;
-  if (currentLevelId === 1) {
-    unlockLevel(2);
-    newlyUnlockedLevel = 2;
-    nextLevel = getLevel(2);
-  } else if (currentLevelId === 2) {
-    unlockLevel(3);
-    newlyUnlockedLevel = 3;
-    nextLevel = getLevel(3);
+  if (currentLevelId < 8) {
+    newlyUnlockedLevel = currentLevelId + 1;
+    unlockLevel(newlyUnlockedLevel);
+    nextLevel = getLevel(newlyUnlockedLevel);
   }
 
   const save = loadProgress();
   const bestTime = save.bestTimes[currentLevelId];
 
-  // If final level (Level 3) completed, show Adventure Complete
-  if (currentLevelId === 3) {
+  // If final destination (Pluto) completed, celebrate campaign victory!
+  if (currentLevelId === 8) {
     chime(1200, 0.6);
     setTimeout(() => chime(1500, 0.8), 200);
     $('adventure-modal').classList.remove('hidden');
+    if (newlyUnlockedRewards.length > 0) {
+      setTimeout(() => showRewardToast(newlyUnlockedRewards[0]), 600);
+    }
     return;
   }
 
-  // Fill in completion modal data
+  // Populate completion modal data
   chime(950, 0.4);
   setTimeout(() => chime(1200, 0.6), 220);
 
   $('comp-crystals').textContent = `${state.collected.size} / ${state.crystalCount}`;
   $('comp-time').textContent = formatTime(completionTime);
-  $('comp-best').textContent = formatTime(bestTime);
+  $('comp-lives').textContent = '♥ '.repeat(state.lives);
+  $('comp-relic').textContent = state.relicCollected ? 'Found ★' : 'Missed';
+  $('comp-relic').style.color = state.relicCollected ? '#ffd166' : '#a0a4b4';
+
+  // Challenge Badges in modal
+  const chalBox = $('comp-challenges-box');
+  chalBox.innerHTML = `
+    <span class="chal-badge earned">🏁 Mission Clear</span>
+    <span class="chal-badge ${state.lives === 3 ? 'earned' : ''}">🛡 Flawless ${state.lives === 3 ? '✓' : ''}</span>
+    <span class="chal-badge ${completionTime <= level.targetTime ? 'earned' : ''}">⚡ Speedrun (${formatTime(level.targetTime)}) ${completionTime <= level.targetTime ? '✓' : ''}</span>
+    <span class="chal-badge ${state.relicCollected ? 'earned' : ''}">★ Secret Relic ${state.relicCollected ? '✓' : ''}</span>
+  `;
 
   const announce = $('unlock-announcement');
   if (nextLevel) {
@@ -385,6 +756,11 @@ function handleLevelCompletion() {
   }
 
   $('completion-modal').classList.remove('hidden');
+
+  // Show reward toast if cosmetics unlocked
+  if (newlyUnlockedRewards.length > 0) {
+    setTimeout(() => showRewardToast(newlyUnlockedRewards[0]), 500);
+  }
 }
 
 // Start / Begin current level
@@ -399,18 +775,20 @@ function begin() {
   $('completion-modal').classList.add('hidden');
   $('adventure-modal').classList.add('hidden');
   $('map-modal').classList.add('hidden');
+  $('customize-modal').classList.add('hidden');
   sync();
   chime(480);
   canvas.focus();
 }
 
-// Interactive Level Map Open & Sync
+// Interactive Solar System Map Open & Sync
 function openLevelMap() {
   if (state.mode === 'playing') {
     state.pause();
   }
   $('pause-modal').classList.add('hidden');
   $('completion-modal').classList.add('hidden');
+  $('customize-modal').classList.add('hidden');
   const prog = loadProgress();
 
   // Populate Island Node States
@@ -438,11 +816,18 @@ function openLevelMap() {
     if (lvl.id === selectedMapLevel) {
       node.classList.add('selected');
     }
-  });
 
-  // Connecting Paths
-  $('map-path-1-2')?.classList.toggle('active', isLevelUnlocked(2, prog));
-  $('map-path-2-3')?.classList.toggle('active', isLevelUnlocked(3, prog));
+    // Render Challenge Medals on SVG Node
+    const medalsEl = $(`medals-${lvl.id}`);
+    if (medalsEl) {
+      const chal = prog.challenges[lvl.id] || {};
+      medalsEl.innerHTML = '';
+      if (chal.completed) medalsEl.innerHTML += '<text x="-12" y="0" font-size="9" fill="#ffd166">🏁</text>';
+      if (chal.flawless) medalsEl.innerHTML += '<text x="-4" y="0" font-size="9" fill="#8bffdf">🛡</text>';
+      if (chal.speedrun) medalsEl.innerHTML += '<text x="4" y="0" font-size="9" fill="#ff8484">⚡</text>';
+      if (chal.relic) medalsEl.innerHTML += '<text x="12" y="0" font-size="9" fill="#ffd166">★</text>';
+    }
+  });
 
   updateMapCard(selectedMapLevel);
   $('map-modal').classList.remove('hidden');
@@ -450,7 +835,6 @@ function openLevelMap() {
 
 function selectMapLevel(id) {
   selectedMapLevel = id;
-  const prog = loadProgress();
   LEVELS.forEach(lvl => {
     const node = $(`map-node-${lvl.id}`);
     node?.classList.toggle('selected', lvl.id === id);
@@ -458,6 +842,7 @@ function selectMapLevel(id) {
   updateMapCard(id);
   chime(520, 0.15);
 }
+window.selectMapLevel = selectMapLevel;
 
 function updateMapCard(id) {
   const lvl = getLevel(id);
@@ -465,11 +850,16 @@ function updateMapCard(id) {
   const unlocked = isLevelUnlocked(id, prog);
   const completed = isLevelCompleted(id, prog);
   const bestTime = prog.bestTimes[id];
+  const chal = prog.challenges[id] || {};
 
-  $('card-title').textContent = `${lvl.name}`;
+  $('card-title').textContent = `${lvl.id}. ${lvl.name}`;
   $('card-subtitle').textContent = lvl.subtitle;
   $('card-description').textContent = lvl.description;
-  $('card-objective').textContent = `◇ ${lvl.crystalCount} Energy Crystals`;
+  $('card-classification').textContent = lvl.classification;
+  $('card-gravity').textContent = `g: ${lvl.gravity} m/s²`;
+  $('card-enemy-name').textContent = lvl.enemyName;
+  $('card-enemy-intel').textContent = lvl.enemyIntel;
+  $('card-relic-name').textContent = lvl.relic?.name || 'Unknown';
 
   const badge = $('card-state-badge');
   badge.className = 'badge';
@@ -486,25 +876,140 @@ function updateMapCard(id) {
 
   $('card-best-time').textContent = bestTime !== undefined ? `Best: ${formatTime(bestTime)}` : 'Best: —';
 
-  const lockReason = $('card-lock-reason');
-  const playBtn = $('card-play-btn');
+  // Checklist updates
+  $('chal-comp').classList.toggle('earned', !!chal.completed);
+  $('chal-flaw').classList.toggle('earned', !!chal.flawless);
+  $('chal-speed').classList.toggle('earned', !!chal.speedrun);
+  $('chal-time').textContent = `${lvl.targetTime}s`;
+  $('chal-rel').classList.toggle('earned', !!chal.relic);
 
+  const playBtn = $('card-play-btn');
   if (unlocked) {
-    lockReason.classList.add('hidden');
     playBtn.disabled = false;
-    playBtn.textContent = completed ? 'Replay Garden' : 'Enter Garden';
+    playBtn.textContent = completed ? `Replay ${lvl.name}` : `Launch to ${lvl.name}`;
     playBtn.onclick = () => {
       $('map-modal').classList.add('hidden');
       buildLevelScene(id);
       begin();
     };
   } else {
-    lockReason.classList.remove('hidden');
-    lockReason.textContent = lvl.unlockRequirement || 'Locked';
     playBtn.disabled = true;
-    playBtn.textContent = 'Garden Locked';
+    playBtn.textContent = 'Destination Locked';
     playBtn.onclick = null;
   }
+}
+
+// --- CUSTOMIZE EXPLORER SCREEN & 3D TURNTABLE PREVIEW ---
+function initPreviewTurntable() {
+  const pCanvas = $('preview-canvas');
+  if (!pCanvas) return;
+
+  previewRenderer = new THREE.WebGLRenderer({ canvas: pCanvas, antialias: true, alpha: true });
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(38, 1, 0.1, 20);
+  previewCamera.position.set(0, 1.0, 3.8);
+
+  const pLight = new THREE.DirectionalLight(0xffffff, 2.8);
+  pLight.position.set(2, 4, 3);
+  previewScene.add(pLight);
+
+  const pAmbient = new THREE.AmbientLight(0x7080a0, 1.8);
+  previewScene.add(pAmbient);
+
+  previewHero = createModel('Explorer', 0, -0.6, 0, 1.7);
+  previewScene.add(previewHero);
+  applyCosmeticsToModel(previewHero);
+
+  // Turntable interaction drag controls
+  pCanvas.addEventListener('pointerdown', e => {
+    previewDrag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    pCanvas.setPointerCapture(e.pointerId);
+  });
+  pCanvas.addEventListener('pointermove', e => {
+    if (previewDrag?.id !== e.pointerId) return;
+    previewYaw += (e.clientX - previewDrag.x) * 0.015;
+    previewPitch = THREE.MathUtils.clamp(previewPitch - (e.clientY - previewDrag.y) * 0.01, -0.2, 0.6);
+    previewDrag.x = e.clientX;
+    previewDrag.y = e.clientY;
+  });
+  pCanvas.addEventListener('pointerup', () => previewDrag = null);
+  pCanvas.addEventListener('pointercancel', () => previewDrag = null);
+}
+
+function renderPreviewFrame() {
+  if (previewRenderer && previewScene && previewCamera && previewHero) {
+    if (!previewDrag) {
+      previewYaw += 0.008; // Subtle idle rotation
+    }
+    previewHero.rotation.y = previewYaw;
+    previewHero.rotation.x = previewPitch;
+    previewRenderer.render(previewScene, previewCamera);
+  }
+}
+
+function openCustomizeScreen() {
+  if (state.mode === 'playing') state.pause();
+  $('pause-modal').classList.add('hidden');
+  $('completion-modal').classList.add('hidden');
+  $('map-modal').classList.add('hidden');
+
+  applyCosmeticsToModel(previewHero);
+  renderCustomizationCatalog();
+  $('customize-modal').classList.remove('hidden');
+}
+
+function renderCustomizationCatalog() {
+  const prog = loadProgress();
+  const items = getCosmeticsByCategory(currentCustomCategory);
+  const grid = $('cosmetics-grid');
+  grid.innerHTML = '';
+
+  items.forEach(item => {
+    const isUnlocked = prog.unlockedCosmetics.includes(item.id);
+    const isEquipped = prog.equippedCosmetics[item.category] === item.id;
+
+    const card = document.createElement('div');
+    card.className = `cosmetic-card ${isEquipped ? 'equipped' : ''} ${!isUnlocked ? 'locked' : ''}`;
+    card.setAttribute('tabindex', '0');
+
+    let chipHtml = '';
+    if (item.category === 'body') {
+      chipHtml = `<div class="cosmetic-chip" style="background: ${item.color || '#fff'}"></div>`;
+    } else if (item.category === 'visor') {
+      chipHtml = `<div class="cosmetic-chip" style="background: ${item.glowColor || '#ffae33'}; box-shadow: 0 0 8px ${item.glowColor}"></div>`;
+    } else {
+      chipHtml = `<div class="cosmetic-chip">${item.icon || '✦'}</div>`;
+    }
+
+    card.innerHTML = `
+      <div>
+        <div class="cosmetic-card-top">
+          ${chipHtml}
+          <div class="cosmetic-name">${item.name}</div>
+        </div>
+        <div class="cosmetic-desc">${item.description}</div>
+      </div>
+      <div class="cosmetic-status">
+        ${isEquipped ? '<span class="equipped-tag">EQUIPPED</span>' : ''}
+        ${!isUnlocked ? `<span class="lock-tag">🔒 ${item.unlockHint || 'Locked'}</span>` : ''}
+      </div>
+    `;
+
+    if (isUnlocked) {
+      card.onclick = () => {
+        equipCosmetic(item.category, item.id);
+        applyCosmeticsToModel(hero);
+        applyCosmeticsToModel(previewHero);
+        renderCustomizationCatalog();
+        chime(680, 0.2);
+        message(`Equipped ${item.name}`);
+      };
+    }
+
+    grid.appendChild(card);
+  });
 }
 
 // Reset Progress confirmation handling
@@ -524,18 +1029,23 @@ async function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color('#29253b');
   scene.fog = new THREE.Fog('#29253b', 42, 110);
-  camera = new THREE.PerspectiveCamera(48, 1, 0.1, 160);
+  camera = new THREE.PerspectiveCamera(48, 1, 0.1, 180);
 
-  scene.add(new THREE.HemisphereLight('#d1e5ec', '#423749', 2.1));
+  hemiLight = new THREE.HemisphereLight('#d1e5ec', '#423749', 2.1);
+  scene.add(hemiLight);
+
   sun = new THREE.DirectionalLight('#ffe1b4', 3.2);
-  sun.position.set(-12, 32, -16);
+  sun.position.set(-14, 34, -18);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -32, right: 32, top: 32, bottom: -32, near: 1, far: 110 });
+  Object.assign(sun.shadow.camera, { left: -36, right: 36, top: 36, bottom: -36, near: 1, far: 120 });
   scene.add(sun.target);
   sun.shadow.normalBias = 0.04;
   sun.shadow.bias = -0.00015;
   scene.add(sun);
+
+  backdropGroup = new THREE.Group();
+  scene.add(backdropGroup);
 
   levelGroup = new THREE.Group();
   scene.add(levelGroup);
@@ -543,16 +1053,29 @@ async function init() {
   collisionDebugGroup = new THREE.Group();
   scene.add(collisionDebugGroup);
 
-  // Load all 13 models
+  particlesGroup = new THREE.Group();
+  scene.add(particlesGroup);
+
+  // Load all 24 models (original + solar system models)
   const loader = new GLTFLoader();
-  const names = ['Explorer', 'Drone', 'Crystal', 'Portal', 'Tree', 'Rock', 'Island', 'Path', 'Crate', 'Lamp', 'Bracken', 'Bluebell', 'Bench'];
+  const names = [
+    'Explorer', 'Drone', 'Crystal', 'Portal', 'Tree', 'Rock', 'Island', 'Path', 'Crate', 'Lamp', 'Bracken', 'Bluebell', 'Bench',
+    'Hopper', 'Rover', 'StormDrone', 'RingSkimmer', 'WindSentinel', 'TempestHunter', 'FrostCrawler', 'Relic',
+    'AntennaDish', 'RingCrown', 'RoverPack', 'CloudPack', 'FrostPack'
+  ];
+
   let done = 0;
   await Promise.all(names.map(async n => {
-    models[n] = (await loader.loadAsync(`./models/${n}.glb`)).scene;
-    $('begin').textContent = `Growing your garden… ${Math.round((++done / names.length) * 100)}%`;
+    try {
+      models[n] = (await loader.loadAsync(`./models/${n}.glb`)).scene;
+    } catch (e) {
+      console.warn(`Model ${n}.glb optional fallback`);
+    }
+    done++;
+    $('begin').textContent = `Calibrating solar drives… ${Math.round((done / names.length) * 100)}%`;
   }));
 
-  // Build Player Explorer
+  // Build Player Explorer directly in root scene
   hero = createModel('Explorer', 0, 0, -2, 1.65);
   hero.rotation.y = Math.PI;
   scene.add(hero);
@@ -572,8 +1095,11 @@ async function init() {
   // Build Level 1 by default
   buildLevelScene(1);
 
+  // Initialize Turntable Preview
+  initPreviewTurntable();
+
   $('begin').disabled = false;
-  $('begin').textContent = 'Begin exploring';
+  $('begin').textContent = 'Begin Solar Expedition';
 
   // Read-only model context tool for agent debugging
   const context = document.modelContext;
@@ -598,8 +1124,47 @@ async function init() {
 function setupEventListeners() {
   $('begin').onclick = begin;
   $('open-map-intro').onclick = openLevelMap;
+  $('open-customize-intro').onclick = openCustomizeScreen;
   $('map-btn').onclick = openLevelMap;
-  $('close-map-btn').onclick = () => $('map-modal').classList.add('hidden');
+  let customizeOpenedFromMap = false;
+  $('open-customize-from-map').onclick = () => {
+    customizeOpenedFromMap = true;
+    openCustomizeScreen();
+  };
+  $('close-customize-btn').onclick = () => {
+    $('customize-modal').classList.add('hidden');
+    if (customizeOpenedFromMap) {
+      customizeOpenedFromMap = false;
+      openLevelMap();
+    }
+  };
+
+  // Category Tabs click
+  document.querySelectorAll('.cat-tab').forEach(tab => {
+    tab.onclick = () => {
+      document.querySelectorAll('.cat-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentCustomCategory = tab.dataset.category;
+      renderCustomizationCatalog();
+      chime(440, 0.1);
+    };
+  });
+
+  // Restore Default Appearance
+  $('restore-default-btn').onclick = () => {
+    resetAppearance();
+    applyCosmeticsToModel(hero);
+    applyCosmeticsToModel(previewHero);
+    renderCustomizationCatalog();
+    message('Explorer appearance restored to default');
+    chime(540, 0.2);
+  };
+  $('reset-appearance-btn').onclick = () => {
+    resetAppearance();
+    applyCosmeticsToModel(hero);
+    applyCosmeticsToModel(previewHero);
+    message('Explorer appearance restored to default');
+  };
 
   $('pause').onclick = () => {
     if (state.mode === 'playing') state.pause();
@@ -622,6 +1187,7 @@ function setupEventListeners() {
     state.start();
     sync();
   };
+  $('pause-custom-btn').onclick = openCustomizeScreen;
   $('pause-restart-btn').onclick = () => {
     $('pause-modal').classList.add('hidden');
     state.reset();
@@ -635,7 +1201,7 @@ function setupEventListeners() {
   // Completion buttons
   $('comp-next-btn').onclick = () => {
     $('completion-modal').classList.add('hidden');
-    if (currentLevelId < 3) {
+    if (currentLevelId < 8) {
       buildLevelScene(currentLevelId + 1);
       begin();
     }
@@ -644,6 +1210,7 @@ function setupEventListeners() {
     $('completion-modal').classList.add('hidden');
     openLevelMap();
   };
+  $('comp-custom-btn').onclick = openCustomizeScreen;
   $('comp-replay-btn').onclick = () => {
     $('completion-modal').classList.add('hidden');
     state.reset();
@@ -655,9 +1222,10 @@ function setupEventListeners() {
     $('adventure-modal').classList.add('hidden');
     openLevelMap();
   };
+  $('adv-custom-btn').onclick = openCustomizeScreen;
   $('adv-replay-btn').onclick = () => {
     $('adventure-modal').classList.add('hidden');
-    buildLevelScene(3);
+    buildLevelScene(8);
     begin();
   };
 
@@ -665,24 +1233,35 @@ function setupEventListeners() {
   $('reset-progress-btn').onclick = promptResetProgress;
   $('confirm-reset-cancel').onclick = () => $('confirm-reset-modal').classList.add('hidden');
   $('confirm-reset-yes').onclick = () => {
-    resetProgress();
+    resetAllProgression();
     $('confirm-reset-modal').classList.add('hidden');
     selectedMapLevel = 1;
     newlyUnlockedLevel = null;
+    applyCosmeticsToModel(hero);
+    applyCosmeticsToModel(previewHero);
+    buildLevelScene(1);
     openLevelMap();
     message('Saved progress reset to defaults');
   };
 
-  // Map Node Clicks
-  [1, 2, 3].forEach(id => {
+  // Map Node Clicks for all 8 destinations
+  [1, 2, 3, 4, 5, 6, 7, 8].forEach(id => {
     const node = $(`map-node-${id}`);
-    node?.addEventListener('click', () => selectMapLevel(id));
-    node?.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        selectMapLevel(id);
-      }
-    });
+    if (node) {
+      node.onclick = () => selectMapLevel(id);
+      node.querySelectorAll('*').forEach(c => {
+        c.onclick = (e) => {
+          e.stopPropagation();
+          selectMapLevel(id);
+        };
+      });
+      node.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectMapLevel(id);
+        }
+      });
+    }
   });
 
   // Global Keyboard Navigation
@@ -691,7 +1270,9 @@ function setupEventListeners() {
       e.preventDefault();
     }
     if (e.code === 'Escape') {
-      if (!$('map-modal').classList.contains('hidden')) {
+      if (!$('customize-modal').classList.contains('hidden')) {
+        $('customize-modal').classList.add('hidden');
+      } else if (!$('map-modal').classList.contains('hidden')) {
         $('map-modal').classList.add('hidden');
       } else if (!$('completion-modal').classList.contains('hidden')) {
         $('completion-modal').classList.add('hidden');
@@ -705,6 +1286,10 @@ function setupEventListeners() {
     if (e.code === 'KeyM') {
       if ($('map-modal').classList.contains('hidden')) openLevelMap();
       else $('map-modal').classList.add('hidden');
+    }
+    if (e.code === 'KeyC') {
+      if ($('customize-modal').classList.contains('hidden')) openCustomizeScreen();
+      else $('customize-modal').classList.add('hidden');
     }
     if (e.code === 'KeyO') {
       toggleCollisionOverlay();
@@ -774,6 +1359,23 @@ function resize() {
 }
 window.addEventListener('resize', resize);
 
+// Spawns subtle movement particle trail
+function spawnTrailParticle(pos) {
+  const save = loadProgress();
+  const trailId = save.equippedCosmetics.trail;
+  if (!trailId || trailId === 'trail_default') return;
+
+  const item = getCosmetic(trailId);
+  const color = item?.color || '#ffd166';
+
+  const pGeo = new THREE.SphereGeometry(0.06, 6, 6);
+  const pMat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 });
+  const pMesh = new THREE.Mesh(pGeo, pMat);
+  pMesh.position.set(pos.x + (Math.random() - 0.5) * 0.2, pos.y + 0.08, pos.z + (Math.random() - 0.5) * 0.2);
+  pMesh.userData = { life: 0.6, maxLife: 0.6 };
+  particlesGroup.add(pMesh);
+}
+
 // Main Game Render & Physics Loop
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
@@ -787,7 +1389,7 @@ function frame() {
   state.step(dt, { x: dx, z: dz, jump, run: keys.has('ShiftLeft') || keys.has('ShiftRight') });
   jump = false;
 
-  // Hero position & orientation
+  // Hero position, orientation, and subtle movement trail
   if (hero) {
     const bob = state.mode === 'playing' && (moveX || moveZ) && state.y === 0 ? Math.sin(state.time * 16) * 0.035 : 0;
     hero.position.set(state.x, state.y + bob, state.z);
@@ -795,6 +1397,9 @@ function frame() {
     if (state.mode === 'playing' && (dx || dz)) {
       const angle = Math.atan2(dx, dz);
       hero.rotation.y += Math.atan2(Math.sin(angle - hero.rotation.y), Math.cos(angle - hero.rotation.y)) * Math.min(1, dt * 12);
+      if (Math.random() < 0.35) {
+        spawnTrailParticle(hero.position);
+      }
     }
 
     // Invulnerability visual feedback: blinking + glowing energy shield
@@ -808,6 +1413,20 @@ function frame() {
     }
   }
 
+  // Update particles in trail
+  for (let i = particlesGroup.children.length - 1; i >= 0; i--) {
+    const p = particlesGroup.children[i];
+    p.userData.life -= dt;
+    p.position.y += dt * 0.3;
+    p.scale.multiplyScalar(0.96);
+    if (p.material) p.material.opacity = p.userData.life / p.userData.maxLife;
+    if (p.userData.life <= 0) {
+      particlesGroup.remove(p);
+      p.geometry?.dispose();
+      p.material?.dispose();
+    }
+  }
+
   // Animate Crystals
   gemModels.forEach((m, i) => {
     m.visible = !state.collected.has(i);
@@ -815,13 +1434,103 @@ function frame() {
     m.position.y = 0.2 + Math.sin(state.time * 2 + i) * 0.13;
   });
 
-  // Animate UFO Sentinels
-  const currentPatrols = getPatrolPositions(state.level, state.time);
-  currentPatrols.forEach((p, i) => {
-    if (droneModels[i]) {
-      droneModels[i].position.set(p.x, p.y + Math.sin(state.time * 3 + i) * 0.08, p.z);
+  // Animate Hidden Planetary Relic
+  if (relicModel) {
+    relicModel.visible = !state.relicCollected;
+    relicModel.rotation.y = state.time * 1.4;
+    relicModel.rotation.x = Math.sin(state.time * 0.8) * 0.2;
+    relicModel.position.y = (state.level.relic?.y || 0.5) + Math.sin(state.time * 2.5) * 0.12;
+  }
+
+  // Animate Destination Enemies & Telegraphs
+  const level = state.level;
+  if (level.destinationType === 'garden') {
+    const currentPatrols = getPatrolPositions(level, state.time);
+    currentPatrols.forEach((p, i) => {
+      if (enemyModels[i]) {
+        enemyModels[i].position.set(p.x, p.y + Math.sin(state.time * 3 + i) * 0.08, p.z);
+      }
+    });
+  } else if (level.destinationType === 'moon') {
+    state.hoppers.forEach((h, i) => {
+      const m = enemyModels[i];
+      if (m) {
+        m.position.set(h.x, h.y, h.z);
+        if (m.userData.reticle) {
+          m.userData.reticle.visible = h.reticleVisible;
+          m.userData.reticle.position.set(h.targetX, 0.04, h.targetZ);
+          m.userData.reticle.scale.setScalar(1 + Math.sin(state.time * 12) * 0.1);
+        }
+      }
+    });
+  } else if (level.destinationType === 'mars') {
+    state.rovers.forEach((r, i) => {
+      const m = enemyModels[i];
+      if (m) {
+        m.position.set(r.x, 0, r.fixedCoord);
+        m.rotation.y = r.dir > 0 ? 0 : Math.PI;
+        if (m.userData.cone) {
+          m.userData.cone.position.set(r.x + (r.dir * 2.1), 0.05, r.fixedCoord);
+          m.userData.cone.material.color = new THREE.Color(r.state === 'alert' || r.state === 'charge' ? 0xff2222 : 0xff8484);
+        }
+      }
+    });
+  } else if (level.destinationType === 'jupiter') {
+    state.stormDrones.forEach((sd, i) => {
+      const m = enemyModels[i];
+      if (m) {
+        m.position.set(sd.x, sd.y + Math.sin(state.time * 2.5 + i) * 0.1, sd.z);
+        m.rotation.y = state.time * 3.0;
+        if (m.userData.pulse) {
+          m.userData.pulse.visible = sd.state === 'pulse';
+          const r = sd.currentPulseRadius || 0.1;
+          m.userData.pulse.scale.set(r, r, r);
+        }
+      }
+    });
+  } else if (level.destinationType === 'saturn') {
+    if (level.skimmers) {
+      level.skimmers.forEach((sk, i) => {
+        const m = enemyModels[i];
+        if (m) {
+          const s = state.time * sk.speed + sk.phase;
+          const sx = sk.cx + Math.cos(s) * sk.rx;
+          const sz = sk.cz + Math.sin(s) * sk.rz;
+          m.position.set(sx, sk.y, sz);
+          m.rotation.y = -s + Math.PI / 2;
+        }
+      });
     }
-  });
+  } else if (level.destinationType === 'uranus') {
+    state.sentinels.forEach((ws, i) => {
+      const m = enemyModels[i];
+      if (m) {
+        m.position.set(ws.x, ws.y, ws.z);
+        m.rotation.y = state.time * 4.0;
+        if (m.userData.arrow) {
+          m.userData.arrow.visible = ws.state === 'telegraph' || ws.state === 'gust';
+          m.userData.arrow.material.color = new THREE.Color(ws.state === 'gust' ? 0x2bf7ff : 0x5cd4db);
+        }
+      }
+    });
+  } else if (level.destinationType === 'neptune') {
+    state.hunters.forEach((th, i) => {
+      const m = enemyModels[i];
+      if (m) {
+        m.position.set(th.x, th.y, th.z);
+        if (m.userData.line) {
+          m.userData.line.visible = th.state === 'aim';
+        }
+      }
+    });
+  } else if (level.destinationType === 'pluto') {
+    const crawlerPositions = getPatrolPositions(level, state.time);
+    crawlerPositions.forEach((p, i) => {
+      if (enemyModels[i]) {
+        enemyModels[i].position.set(p.x, p.y, p.z);
+      }
+    });
+  }
 
   // Portal state & animation
   if (portalGem) {
@@ -843,12 +1552,6 @@ function frame() {
     if (footDbg) {
       footDbg.position.set(state.x, 0.02, state.z);
     }
-    currentPatrols.forEach((p, i) => {
-      const ufoDbg = collisionDebugGroup.getObjectByName(`debugUfo_${i}`);
-      if (ufoDbg) {
-        ufoDbg.position.set(p.x, p.y + COLLISION_CONFIG.ufoHeight / 2 + COLLISION_CONFIG.ufoYOffset, p.z);
-      }
-    });
 
     // Update Live Debug Readout
     $('dbg-player-pos').textContent = `${state.x.toFixed(2)}, ${state.y.toFixed(2)}, ${state.z.toFixed(2)}`;
@@ -857,12 +1560,25 @@ function frame() {
     $('dbg-invuln').textContent = state.time < state.hurtUntil ? `YES (${(state.hurtUntil - state.time).toFixed(1)}s)` : 'NO';
     $('dbg-invuln').style.color = state.time < state.hurtUntil ? '#ffd166' : '#a0a0b0';
 
-    let minUfoDist = 999;
-    currentPatrols.forEach(p => {
-      const d = Math.hypot(state.x - p.x, state.z - p.z);
-      if (d < minUfoDist) minUfoDist = d;
-    });
-    $('dbg-ufo-dist').textContent = `${minUfoDist.toFixed(2)}m (hit < 0.72m)`;
+    let nearestDist = 999;
+    if (level.destinationType === 'garden') {
+      const patrols = getPatrolPositions(level, state.time);
+      patrols.forEach(p => {
+        const d = Math.hypot(state.x - p.x, state.z - p.z);
+        if (d < nearestDist) nearestDist = d;
+      });
+    } else if (level.destinationType === 'moon') {
+      state.hoppers.forEach(h => {
+        const d = Math.hypot(state.x - h.x, state.z - h.z);
+        if (d < nearestDist) nearestDist = d;
+      });
+    } else if (level.destinationType === 'mars') {
+      state.rovers.forEach(r => {
+        const d = Math.hypot(state.x - r.x, state.z - r.fixedCoord);
+        if (d < nearestDist) nearestDist = d;
+      });
+    }
+    $('dbg-ufo-dist').textContent = nearestDist < 900 ? `${nearestDist.toFixed(2)}m` : 'Safe';
   }
 
   // Audio & Event handling
@@ -870,18 +1586,31 @@ function frame() {
     if (event === 'gem') {
       chime(650 + state.collected.size * 90);
       message(`${state.collected.size} of ${state.crystalCount} crystals recovered`);
+    } else if (event === 'relic') {
+      chime(1300, 0.6);
+      message(`★ SECRET RELIC DISCOVERED: ${level.relic?.name}!`, 3500);
+      $('relic-indicator').classList.remove('hidden');
     } else if (event === 'portal-activated') {
       chime(1050, 0.5);
-      message('PORTAL ACTIVE! Return to the ancient gateway.');
+      message('PORTAL ACTIVE! Return to the celestial gateway.');
     } else if (event === 'hurt') {
       chime(110, 0.4, 'sawtooth');
-      message('Energy lost! Returned to sanctuary.');
+      message('Energy lost! Returned to landing site.');
+    } else if (event === 'rover-alert') {
+      chime(780, 0.25, 'triangle');
+    } else if (event === 'hopper-slam') {
+      chime(90, 0.35, 'square');
+    } else if (event === 'storm-pulse') {
+      chime(540, 0.35, 'sawtooth');
+    } else if (event === 'wind-gust') {
+      chime(260, 0.5, 'sine');
     }
   }
 
   // Smooth Third-Person Orbit Camera
   const target = started ? new THREE.Vector3(state.x, state.y + 1, state.z) : new THREE.Vector3(6, 0, 7);
-  const distance = started ? 9 : 35;
+  // Tune camera distance slightly for low gravity worlds
+  const distance = started ? (level.gravity < 12 ? 10.5 : 9) : 35;
   const desired = target.clone().add(new THREE.Vector3(
     Math.sin(yaw) * Math.cos(pitch) * distance,
     Math.sin(pitch) * distance,
@@ -892,15 +1621,20 @@ function frame() {
 
   sync();
   renderer.render(scene, camera);
+
+  // Render 3D Turntable Preview if customization modal is open
+  if (!$('customize-modal').classList.contains('hidden')) {
+    renderPreviewFrame();
+  }
 }
 
 // Initialize and handle fatal load errors
 init().catch(e => {
   console.error('Failed to initialize Crystal Garden:', e);
-  $('eyebrow').textContent = 'GARDEN COULD NOT LOAD';
+  $('eyebrow').textContent = 'EXPEDITION COULD NOT LOAD';
   $('heading').innerHTML = 'Let’s try<br><i>again.</i>';
   $('description').textContent = 'Check your connection and ensure WebGL is enabled in your browser.';
-  $('begin').textContent = 'Reload garden';
+  $('begin').textContent = 'Reload expedition';
   $('begin').disabled = false;
   $('begin').onclick = () => location.reload();
 });

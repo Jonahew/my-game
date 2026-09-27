@@ -1,0 +1,528 @@
+// Cosmetic items catalog and reward evaluation for Crystal Garden
+
+export const COSMETIC_CATEGORIES = [
+  { id: 'body', name: 'Body Finish', icon: '🎨' },
+  { id: 'visor', name: 'Visor & Optics', icon: '🥽' },
+  { id: 'antenna', name: 'Head & Antenna', icon: '📡' },
+  { id: 'backpack', name: 'Backpack Gear', icon: '🎒' },
+  { id: 'badge', name: 'Suit Badge', icon: '🎖️' },
+  { id: 'trail', name: 'Movement Trail', icon: '✨' },
+];
+
+export const COSMETICS = [
+  // --- BODY FINISHES ---
+  {
+    id: 'body_default',
+    category: 'body',
+    name: 'Garden Explorer',
+    description: 'The standard ivory and teal exploration suit.',
+    color: '#e0caa3',
+    accentColor: '#12a39a',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'body_lunar',
+    category: 'body',
+    name: 'Lunar Regolith',
+    description: 'Pristine lunar-white plating with titanium weave.',
+    color: '#e6ebf2',
+    accentColor: '#5c6470',
+    unlockLevel: 2,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 2 (Moon)',
+  },
+  {
+    id: 'body_mars',
+    category: 'body',
+    name: 'Martian Ochre',
+    description: 'Tough oxidized iron plating resistant to dust storms.',
+    color: '#d9522b',
+    accentColor: '#301814',
+    unlockLevel: 3,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 3 (Mars)',
+  },
+  {
+    id: 'body_jupiter',
+    category: 'body',
+    name: 'Jovian Amber',
+    description: 'High-voltage storm stripes tuned for electromagnetic radiation.',
+    color: '#e89433',
+    accentColor: '#63258f',
+    unlockLevel: 4,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 4 (Jupiter)',
+  },
+  {
+    id: 'body_saturn',
+    category: 'body',
+    name: 'Cassini Gold',
+    description: 'Polished gold leaf alloy reflecting planetary ring glare.',
+    color: '#fad050',
+    accentColor: '#8a6a1c',
+    unlockLevel: 5,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 5 (Saturn)',
+  },
+  {
+    id: 'body_uranus',
+    category: 'body',
+    name: 'Aquamarine Glaze',
+    description: 'Ultra-lightweight aerogel composite in pale cyan.',
+    color: '#5cd4db',
+    accentColor: '#1c626b',
+    unlockLevel: 6,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 6 (Uranus)',
+  },
+  {
+    id: 'body_neptune',
+    category: 'body',
+    name: 'Abyssal Azure',
+    description: 'Pressurized deep-sea storm hull in dark ocean cobalt.',
+    color: '#2055d9',
+    accentColor: '#0a1d47',
+    unlockLevel: 7,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 7 (Neptune)',
+  },
+  {
+    id: 'body_pluto',
+    category: 'body',
+    name: 'Cryo Frost',
+    description: 'Sublimation-resistant nitrogen ice explorer finish.',
+    color: '#d4ebf7',
+    accentColor: '#4ea8d6',
+    unlockLevel: 8,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 8 (Pluto)',
+  },
+  {
+    id: 'body_emerald',
+    category: 'body',
+    name: 'Jade Solarium',
+    description: 'Polished jade finish awarded for garden mastery.',
+    color: '#4cb879',
+    accentColor: '#1a5231',
+    unlockLevel: 1,
+    unlockType: 'flawless',
+    unlockHint: 'Crystal Garden: Complete without losing a life',
+  },
+
+  // --- VISOR & OPTICS ---
+  {
+    id: 'visor_default',
+    category: 'visor',
+    name: 'Amber Glow',
+    description: 'Standard optical array with amber tint.',
+    glowColor: '#ffae33',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'visor_apollo',
+    category: 'visor',
+    name: 'Apollo Emerald',
+    description: 'Solar glare filter designed for harsh lunar contrast.',
+    glowColor: '#34f59e',
+    unlockLevel: 2,
+    unlockType: 'flawless',
+    unlockHint: 'Moon: Complete without losing a life',
+  },
+  {
+    id: 'visor_ruby',
+    category: 'visor',
+    name: 'Perseverance Ruby',
+    description: 'Infrared mineral scanner lens with ruby glow.',
+    glowColor: '#ff334b',
+    unlockLevel: 3,
+    unlockType: 'flawless',
+    unlockHint: 'Mars: Complete without losing a life',
+  },
+  {
+    id: 'visor_violet',
+    category: 'visor',
+    name: 'Synchrotron Violet',
+    description: 'Radiation-shielded cyclonic violet visor.',
+    glowColor: '#c742ff',
+    unlockLevel: 4,
+    unlockType: 'flawless',
+    unlockHint: 'Jupiter: Complete without losing a life',
+  },
+  {
+    id: 'visor_ice',
+    category: 'visor',
+    name: 'Ring Shimmer',
+    description: 'Prismatic ice crystal lens with soft gold reflection.',
+    glowColor: '#ffe875',
+    unlockLevel: 5,
+    unlockType: 'flawless',
+    unlockHint: 'Saturn: Complete without losing a life',
+  },
+  {
+    id: 'visor_cyan',
+    category: 'visor',
+    name: 'Methane Cyan',
+    description: 'Atmospheric penetration sensor in electric cyan.',
+    glowColor: '#2bf7ff',
+    unlockLevel: 6,
+    unlockType: 'flawless',
+    unlockHint: 'Uranus: Complete without losing a life',
+  },
+  {
+    id: 'visor_indigo',
+    category: 'visor',
+    name: 'Triton Indigo',
+    description: 'Deep ocean polar night sensor in luminous blue.',
+    glowColor: '#3b70ff',
+    unlockLevel: 7,
+    unlockType: 'flawless',
+    unlockHint: 'Neptune: Complete without losing a life',
+  },
+  {
+    id: 'visor_diamond',
+    category: 'visor',
+    name: 'Starlight Diamond',
+    description: 'Pure starlight optics calibrated for the edge of the system.',
+    glowColor: '#ffffff',
+    unlockLevel: 8,
+    unlockType: 'flawless',
+    unlockHint: 'Pluto: Complete without losing a life',
+  },
+
+  // --- ANTENNA & HEAD ---
+  {
+    id: 'antenna_default',
+    category: 'antenna',
+    name: 'Beacon Antenna',
+    description: 'Standard exploration signal antenna.',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'antenna_dish',
+    category: 'antenna',
+    name: 'Satellite Dish',
+    description: 'High-gain parabolic dish for deep-space telemetry.',
+    modelName: 'AntennaDish',
+    unlockLevel: 2,
+    unlockType: 'speedrun',
+    unlockHint: 'Moon: Complete in under 45 seconds',
+  },
+  {
+    id: 'antenna_ring_crown',
+    category: 'antenna',
+    name: 'Celestial Ring Halo',
+    description: 'A floating miniature planetary ring hovering overhead.',
+    modelName: 'RingCrown',
+    unlockLevel: 5,
+    unlockType: 'speedrun',
+    unlockHint: 'Saturn: Complete in under 55 seconds',
+  },
+  {
+    id: 'antenna_solar_mast',
+    category: 'antenna',
+    name: 'Survey Mast',
+    description: 'Pan-tilt optical sensor mast on the helmet.',
+    unlockLevel: 3,
+    unlockType: 'speedrun',
+    unlockHint: 'Mars: Complete in under 50 seconds',
+  },
+  {
+    id: 'antenna_storm_coils',
+    category: 'antenna',
+    name: 'Tesla Induction Rods',
+    description: 'Dual electrostatic discharge rods.',
+    unlockLevel: 4,
+    unlockType: 'speedrun',
+    unlockHint: 'Jupiter: Complete in under 55 seconds',
+  },
+  {
+    id: 'antenna_axial',
+    category: 'antenna',
+    name: 'Axial Tilt Array',
+    description: 'Swept aerodynamic antenna aligned with Uranus’s 98° tilt.',
+    unlockLevel: 6,
+    unlockType: 'speedrun',
+    unlockHint: 'Uranus: Complete in under 50 seconds',
+  },
+  {
+    id: 'antenna_frost',
+    category: 'antenna',
+    name: 'Cryo Spikes',
+    description: 'Dual crystalline frost spikes.',
+    unlockLevel: 8,
+    unlockType: 'speedrun',
+    unlockHint: 'Pluto: Complete in under 60 seconds',
+  },
+
+  // --- BACKPACK GEAR ---
+  {
+    id: 'backpack_default',
+    category: 'backpack',
+    name: 'Explorer Pack',
+    description: 'Standard compact life support and battery.',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'backpack_rover',
+    category: 'backpack',
+    name: 'Rover Survey Rig',
+    description: 'Field pack equipped with articulated sensor arm and solar panel.',
+    modelName: 'RoverPack',
+    unlockLevel: 3,
+    unlockType: 'relic',
+    unlockHint: 'Mars: Discover the hidden Martian Relic',
+  },
+  {
+    id: 'backpack_cloud',
+    category: 'backpack',
+    name: 'Vapor Collector',
+    description: 'Atmospheric gas condensation pack with glowing canisters.',
+    modelName: 'CloudPack',
+    unlockLevel: 4,
+    unlockType: 'relic',
+    unlockHint: 'Jupiter: Discover the hidden Jovian Relic',
+  },
+  {
+    id: 'backpack_frost',
+    category: 'backpack',
+    name: 'Cryo Expedition Pack',
+    description: 'Heavy thermal insulation rig with cooling radiators.',
+    modelName: 'FrostPack',
+    unlockLevel: 8,
+    unlockType: 'relic',
+    unlockHint: 'Pluto: Discover the hidden Pluto Relic',
+  },
+  {
+    id: 'backpack_lunar',
+    category: 'backpack',
+    name: 'Lunar Core Pack',
+    description: 'Sealed geological specimen container from the Sea of Tranquility.',
+    unlockLevel: 2,
+    unlockType: 'relic',
+    unlockHint: 'Moon: Discover the hidden Lunar Relic',
+  },
+  {
+    id: 'backpack_saturn',
+    category: 'backpack',
+    name: 'Ring Shard Collector',
+    description: 'Magnetic containment rig for Saturnian ring ice.',
+    unlockLevel: 5,
+    unlockType: 'relic',
+    unlockHint: 'Saturn: Discover the hidden Saturn Relic',
+  },
+  {
+    id: 'backpack_uranus',
+    category: 'backpack',
+    name: 'Vortex Turbine Pack',
+    description: 'Ducted intake turbine capturing atmospheric jetstreams.',
+    unlockLevel: 6,
+    unlockType: 'relic',
+    unlockHint: 'Uranus: Discover the hidden Uranus Relic',
+  },
+  {
+    id: 'backpack_neptune',
+    category: 'backpack',
+    name: 'Deep Tempest Turbine',
+    description: 'High-pressure hyperbaric propulsion pack.',
+    unlockLevel: 7,
+    unlockType: 'relic',
+    unlockHint: 'Neptune: Discover the hidden Neptune Relic',
+  },
+
+  // --- SUIT BADGES ---
+  {
+    id: 'badge_default',
+    category: 'badge',
+    name: 'Standard Insignia',
+    description: 'Cadet insignia of the Explorer Guild.',
+    icon: '🌱',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'badge_earthrise',
+    category: 'badge',
+    name: 'Earthrise Medal',
+    description: 'Commemorating your view of home from lunar orbit.',
+    icon: '🌍',
+    unlockLevel: 2,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 2 (Moon)',
+  },
+  {
+    id: 'badge_olympus',
+    category: 'badge',
+    name: 'Olympus Mons Emblem',
+    description: 'In honor of traversing the Martian rust canyons.',
+    icon: '🌋',
+    unlockLevel: 3,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 3 (Mars)',
+  },
+  {
+    id: 'badge_redspot',
+    category: 'badge',
+    name: 'Great Red Spot Pin',
+    description: 'Awarded for surviving the Jovian electrical tempest.',
+    icon: '🌀',
+    unlockLevel: 4,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 4 (Jupiter)',
+  },
+  {
+    id: 'badge_cassini',
+    category: 'badge',
+    name: 'Cassini Division Ribbon',
+    description: 'Celebrating orbital rendezvous over Saturn’s rings.',
+    icon: '🪐',
+    unlockLevel: 5,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 5 (Saturn)',
+  },
+  {
+    id: 'badge_uranus',
+    category: 'badge',
+    name: 'Axial Sovereign',
+    description: 'Emblem of the tilted ice giant research expedition.',
+    icon: '🧭',
+    unlockLevel: 6,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 6 (Uranus)',
+  },
+  {
+    id: 'badge_triton',
+    category: 'badge',
+    name: 'Tempest Navigator',
+    description: 'Mark of courage in Neptune’s outermost storms.',
+    icon: '🔱',
+    unlockLevel: 7,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 7 (Neptune)',
+  },
+  {
+    id: 'badge_pluto',
+    category: 'badge',
+    name: 'Dwarf Planet Heart',
+    description: 'Tombaugh Regio heart badge for reaching the frontier.',
+    icon: '❄️',
+    unlockLevel: 8,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 8 (Pluto)',
+  },
+
+  // --- MOVEMENT TRAILS ---
+  {
+    id: 'trail_default',
+    category: 'trail',
+    name: 'None',
+    description: 'Clear footprints without particulate emissions.',
+    unlockedByDefault: true,
+  },
+  {
+    id: 'trail_dust',
+    category: 'trail',
+    name: 'Regolith Dust Puffs',
+    description: 'Puffs of lunar dust kicked up on each step and landing.',
+    color: '#cbd4e0',
+    unlockLevel: 2,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 2 (Moon)',
+  },
+  {
+    id: 'trail_mars_dust',
+    category: 'trail',
+    name: 'Martian Rust Trail',
+    description: 'Red oxide dust clouds lingering in your wake.',
+    color: '#e05836',
+    unlockLevel: 3,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 3 (Mars)',
+  },
+  {
+    id: 'trail_electric',
+    category: 'trail',
+    name: 'Ion Arc Sparks',
+    description: 'Crackling violet-gold electrical discharges.',
+    color: '#c454ff',
+    unlockLevel: 4,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 4 (Jupiter)',
+  },
+  {
+    id: 'trail_ring_dust',
+    category: 'trail',
+    name: 'Golden Stardust',
+    description: 'Glittering orbital ring ice and starlight motes.',
+    color: '#ffd952',
+    unlockLevel: 5,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 5 (Saturn)',
+  },
+  {
+    id: 'trail_cyan_wind',
+    category: 'trail',
+    name: 'Cyan Vapor Wisps',
+    description: 'Swirling high-altitude cyan atmospheric ribbons.',
+    color: '#47eff7',
+    unlockLevel: 6,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 6 (Uranus)',
+  },
+  {
+    id: 'trail_blue_jets',
+    category: 'trail',
+    name: 'Abyssal Blue Jets',
+    description: 'Deep cobalt thruster pulses and stormy vapor.',
+    color: '#387aff',
+    unlockLevel: 7,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 7 (Neptune)',
+  },
+  {
+    id: 'trail_frost_shards',
+    category: 'trail',
+    name: 'Cryo Snow Flurries',
+    description: 'Crystalline nitrogen snowflakes and sparkling frost.',
+    color: '#ffffff',
+    unlockLevel: 8,
+    unlockType: 'completion',
+    unlockHint: 'Complete Level 8 (Pluto)',
+  },
+];
+
+export function getCosmetic(id) {
+  return COSMETICS.find(c => c.id === id);
+}
+
+export function getCosmeticsByCategory(category) {
+  return COSMETICS.filter(c => c.category === category);
+}
+
+/**
+ * Deterministically evaluates eligible rewards upon completing a level attempt.
+ * Returns array of newly unlocked cosmetic item objects.
+ */
+export function evaluateRewards(unlockedCosmeticsSet, level, stats) {
+  const newlyUnlocked = [];
+
+  COSMETICS.forEach(item => {
+    if (unlockedCosmeticsSet.has(item.id)) return;
+    if (item.unlockLevel !== level.id) return;
+
+    let earned = false;
+    if (item.unlockType === 'completion' && stats.completed) {
+      earned = true;
+    } else if (item.unlockType === 'flawless' && stats.completed && stats.livesRemaining === 3) {
+      earned = true;
+    } else if (item.unlockType === 'speedrun' && stats.completed && stats.time <= level.targetTime) {
+      earned = true;
+    } else if (item.unlockType === 'relic' && stats.relicFound) {
+      earned = true;
+    }
+
+    if (earned) {
+      newlyUnlocked.push(item);
+    }
+  });
+
+  return newlyUnlocked;
+}

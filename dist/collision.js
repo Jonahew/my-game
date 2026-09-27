@@ -1,4 +1,4 @@
-// Collision and physics configuration & geometry functions
+// Collision and physics configuration & geometry functions for Crystal Garden
 export const COLLISION_CONFIG = {
   // UFO collision shape (closely matching visible saucer body)
   ufoRadius: 0.52,
@@ -83,7 +83,7 @@ export function isGroundSupported(x, z, level, footprint = COLLISION_CONFIG.foot
 }
 
 /**
- * Checks collision between player and a UFO drone.
+ * Checks collision between player and a standard UFO drone or skimmer.
  * Evaluates both horizontal distance (with player-favoring threshold)
  * and vertical clearance (preventing damage when jumping over or below).
  */
@@ -92,7 +92,8 @@ export function checkUfoCollision(player, ufo, config = COLLISION_CONFIG) {
   const dx = player.x - ufo.x;
   const dz = player.z - ufo.z;
   const horizDist = Math.hypot(dx, dz);
-  const horizThreshold = (config.playerRadius + config.ufoRadius) - config.playerFavorMargin;
+  const ufoR = ufo.radius ?? config.ufoRadius;
+  const horizThreshold = (config.playerRadius + ufoR) - config.playerFavorMargin;
 
   if (horizDist >= horizThreshold) {
     return false;
@@ -101,20 +102,94 @@ export function checkUfoCollision(player, ufo, config = COLLISION_CONFIG) {
   // Vertical separation
   const playerBottom = player.y + config.playerYOffset;
   const playerTop = player.y + config.playerHeight;
-  const ufoBottom = ufo.y + config.ufoYOffset;
-  const ufoTop = ufo.y + config.ufoHeight;
+  const ufoHeight = ufo.height ?? config.ufoHeight;
+  const ufoBottom = ufo.y + (ufo.yOffset ?? config.ufoYOffset);
+  const ufoTop = ufo.y + ufoHeight;
 
   // Vertical overlap with player favor
   const overlapBottom = Math.max(playerBottom, ufoBottom);
   const overlapTop = Math.min(playerTop, ufoTop);
 
-  // If player is clearly above UFO top or clearly below UFO bottom, safe!
+  // If player is clearly above top or clearly below bottom, safe!
   if (playerBottom > ufoTop - config.verticalFavorMargin) {
-    return false; // Jumped safely over UFO
+    return false; // Jumped safely over
   }
   if (playerTop < ufoBottom + config.verticalFavorMargin) {
-    return false; // Walked safely below elevated UFO
+    return false; // Walked safely below
   }
 
   return overlapTop >= overlapBottom;
+}
+
+/**
+ * Checks if player is within an active hopper shockwave landing zone
+ */
+export function checkHopperShockwave(player, hopper, config = COLLISION_CONFIG) {
+  if (hopper.state !== 'slam') return false;
+  // Landing shockwave is grounded: safe if jumping high above ground
+  if (player.y > 0.65) return false;
+  const targetX = hopper.targetX ?? hopper.x ?? 0;
+  const targetZ = hopper.targetZ ?? hopper.z ?? 0;
+  const dist = Math.hypot(player.x - targetX, player.z - targetZ);
+  return dist <= hopper.radius - config.playerFavorMargin;
+}
+
+/**
+ * Checks if player is hit by an expanding electrical storm drone pulse
+ */
+export function checkStormPulse(player, drone, config = COLLISION_CONFIG) {
+  if (drone.state !== 'pulse') return false;
+  const dx = player.x - (drone.x ?? 0);
+  const dz = player.z - (drone.z ?? 0);
+  const dist = Math.hypot(dx, dz);
+  // Expanding wave ring with thickness 0.45m
+  const currentRadius = drone.currentPulseRadius || 1.0;
+  const inRing = dist >= (currentRadius - 0.4) && dist <= (currentRadius + 0.15);
+  // Safe if player has leaped high above the drone's pulse plane
+  const droneY = drone.y ?? 1.0;
+  const safeVertical = player.y > (droneY + 0.95);
+  return inRing && !safeVertical;
+}
+
+/**
+ * Checks if player is within a rover's charging hitbox
+ */
+export function checkRoverCollision(player, rover, config = COLLISION_CONFIG) {
+  if (rover.state !== 'charge') return false;
+  const dx = player.x - (rover.x ?? 0);
+  const dz = player.z - (rover.z ?? 0);
+  const dist = Math.hypot(dx, dz);
+  if (dist > (0.65 + config.playerRadius - config.playerFavorMargin)) return false;
+  // Safe if player jumped cleanly over rover
+  if (player.y > 0.85) return false;
+  return true;
+}
+
+/**
+ * Checks if player is hit by a tempest hunter dashing vector
+ */
+export function checkTempestHunterDash(player, hunter, config = COLLISION_CONFIG) {
+  if (hunter.state !== 'dash') return false;
+  const dx = player.x - (hunter.x ?? 0);
+  const dz = player.z - (hunter.z ?? 0);
+  const dist = Math.hypot(dx, dz);
+  if (dist > (0.60 + config.playerRadius - config.playerFavorMargin)) return false;
+  if (player.y > 1.1) return false;
+  return true;
+}
+
+/**
+ * Checks if player steps into an ice patch on Pluto, returning true if slipping
+ */
+export function checkIcePatchSlip(player, icePatches) {
+  if (!icePatches || !icePatches.length) return false;
+  if (player.y > 0.2) return false; // Only slips when on the ground
+  for (let i = 0; i < icePatches.length; i++) {
+    const patch = icePatches[i];
+    const dist = Math.hypot(player.x - patch.x, player.z - patch.z);
+    if (dist <= patch.radius) {
+      return true;
+    }
+  }
+  return false;
 }

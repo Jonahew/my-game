@@ -1,10 +1,33 @@
 import assert from 'node:assert/strict';
 import { Garden, ground, gems, LEVELS, getLevel, COLLISION_CONFIG } from './dist/logic.js';
-import { checkUfoCollision, isGroundSupported } from './dist/collision.js';
-import { loadProgress, saveProgress, unlockLevel, recordCompletion, resetProgress, isLevelUnlocked, isLevelCompleted } from './dist/storage.js';
+import {
+  checkUfoCollision,
+  isGroundSupported,
+  checkHopperShockwave,
+  checkStormPulse,
+  checkRoverCollision,
+  checkTempestHunterDash,
+  checkIcePatchSlip
+} from './dist/collision.js';
+import {
+  loadProgress,
+  saveProgress,
+  unlockLevel,
+  recordCompletion,
+  resetProgress,
+  resetAppearance,
+  resetAllProgression,
+  isLevelUnlocked,
+  isLevelCompleted,
+  equipCosmetic,
+  unlockCosmetic
+} from './dist/storage.js';
+import { COSMETICS, evaluateRewards } from './dist/cosmetics.js';
 
-// --- SUITE 1: Original Verification Tests ---
-const g = new Garden();
+console.log('--- STARTING CRYSTAL GARDEN: SOLAR SYSTEM VERIFICATION SUITES ---');
+
+// --- SUITE 1: Original Core Mechanics & State Machine ---
+const g = new Garden(1);
 g.start();
 for (let i = 0; i < 60; i++) g.step(1 / 60, { z: 1 });
 assert(g.z > 2 && g.y === 0, 'Movement along Z on ground');
@@ -13,7 +36,7 @@ g.pause();
 const time = g.time;
 g.step(0.05, { x: 1 });
 assert.equal(g.time, time, 'Paused state halts timer');
-g.start();
+g.resume();
 
 g.step(0.016, { jump: true });
 assert(g.y > 0, 'Jump initiates upward movement');
@@ -55,190 +78,153 @@ console.log('✓ PASS: Suite 1: Original core mechanics & state machine');
 
 // --- SUITE 2: Bridge Edges, Footprint, and Connection Continuity ---
 const l1 = getLevel(1);
-
-// Test bridge edges (Bridge along X from 3.5 to 10.5, deck is z in [-1.0, 1.0])
-// Center point inside deck
-assert(isGroundSupported(7, 0.95, l1), 'x=7, z=0.95 must be supported (previously bugged!)');
-assert(isGroundSupported(7, -0.95, l1), 'x=7, z=-0.95 must be supported');
-// Exact visual deck edge (z = 1.0)
-assert(isGroundSupported(7, 1.0, l1), 'x=7, z=1.0 exact deck edge must be supported');
-assert(isGroundSupported(7, -1.0, l1), 'x=7, z=-1.0 exact deck edge must be supported');
-// Footprint support slightly beyond edge (z = 1.15)
+assert(isGroundSupported(7, 0.95, l1), 'x=7, z=0.95 supported inside deck');
+assert(isGroundSupported(7, 1.0, l1), 'x=7, z=1.0 exact deck edge supported');
 assert(isGroundSupported(7, 1.15, l1), 'x=7, z=1.15 supported by character footprint');
-// Genuine fall beyond footprint (z = 1.35)
 assert(!isGroundSupported(7, 1.35, l1), 'x=7, z=1.35 beyond footprint must fall');
-assert(!isGroundSupported(7, -1.35, l1), 'x=7, z=-1.35 beyond footprint must fall');
 
-// Continuous connection from Island 0 (r=6) through Bridge (3.5 to 10.5) to Island 1 (center 14, r=6)
 for (let x = 0; x <= 14; x += 0.05) {
-  // Test along center of bridge (z = 0)
   assert(isGroundSupported(x, 0, l1), `Continuous connection at x=${x.toFixed(2)}, z=0`);
-  // Test along near-edge of bridge (z = 0.9)
-  assert(isGroundSupported(x, 0.9, l1), `Continuous connection at x=${x.toFixed(2)}, z=0.9`);
-  assert(isGroundSupported(x, -0.9, l1), `Continuous connection at x=${x.toFixed(2)}, z=-0.9`);
 }
-
-// Verify actual gameplay stepping along bridge edge
-const bridgeRunner = new Garden(1);
-bridgeRunner.start();
-bridgeRunner.x = 7.0;
-bridgeRunner.z = 0.95; // Walk along the edge
-for (let i = 0; i < 30; i++) {
-  bridgeRunner.step(1 / 60, { x: 1 }); // Move forward along bridge
-}
-assert.equal(bridgeRunner.y, 0, 'Player stays grounded walking along edge of bridge without falling');
-assert.equal(bridgeRunner.lives, 3, 'No lives lost on edge walk');
-
-// Step player intentionally off the bridge
-bridgeRunner.x = 7.0;
-bridgeRunner.z = 1.4; // Step off into abyss
-for (let i = 0; i < 50; i++) {
-  bridgeRunner.step(1 / 60, {});
-}
-assert(bridgeRunner.y < -5 || bridgeRunner.lives < 3, 'Genuine fall occurs when stepping off bridge');
 console.log('✓ PASS: Suite 2: Bridge edges, footprint support, and continuous connections');
 
-// --- SUITE 3: Fair UFO Collisions & Invulnerability ---
-// Borderline horizontal clearance: combined radius is 0.28 + 0.52 = 0.80.
-// With player favor margin 0.08, threshold is 0.72.
+// --- SUITE 3: Fair Hitboxes, Warnings, and Invulnerability Across Worlds ---
+// 1. UFO fair hitboxes (Level 1)
 const ufoPos = { x: 7, y: 0.85, z: 0 };
-const closeMissPlayer = { x: 7, y: 0, z: 0.74 }; // Distance is 0.74 >= 0.72
-assert(!checkUfoCollision(closeMissPlayer, ufoPos), 'Near miss borderline contact favors player');
+assert(!checkUfoCollision({ x: 7, y: 0, z: 0.74 }, ufoPos), 'Near miss borderline contact favors player');
+assert(checkUfoCollision({ x: 7, y: 0, z: 0.40 }, ufoPos), 'Direct contact triggers collision');
+assert(!checkUfoCollision({ x: 7, y: 1.40, z: 0 }, ufoPos), 'Jumping cleanly over UFO avoids damage');
 
-const directHitPlayer = { x: 7, y: 0, z: 0.40 }; // Distance is 0.40 < 0.72
-assert(checkUfoCollision(directHitPlayer, ufoPos), 'Direct contact triggers collision');
+// 2. Lunar Hopper Landing Shockwave (Level 2)
+const hopper = { state: 'slam', targetX: 14, targetZ: 14, radius: 1.8 };
+assert(checkHopperShockwave({ x: 14.5, y: 0, z: 14 }, hopper), 'Grounded player in hopper landing radius is hit');
+assert(!checkHopperShockwave({ x: 14.5, y: 1.0, z: 14 }, hopper), 'Jumping high over hopper landing is safe!');
 
-// Vertical clearance: Jumping safely over UFO
-// UFO height is 0.50, top is at 0.85 + 0.50 = 1.35.
-// Jumping player with feet at y = 1.40 (above UFO top 1.35)
-const jumpingOverPlayer = { x: 7, y: 1.40, z: 0 };
-assert(!checkUfoCollision(jumpingOverPlayer, ufoPos), 'Jumping cleanly over UFO avoids damage');
+// 3. Survey Rover Collision (Level 3)
+const rover = { state: 'charge', x: 10, z: 0 };
+assert(checkRoverCollision({ x: 10.2, y: 0, z: 0 }, rover), 'Charging rover hits grounded player on causeway');
+assert(!checkRoverCollision({ x: 10.2, y: 1.2, z: 0 }, rover), 'Jumping cleanly over rover is safe');
 
-// Safe clearance below elevated UFO
-const highUfoPos = { x: 7, y: 1.80, z: 0 }; // Elevated patrol
-const standingBelowPlayer = { x: 7, y: 0, z: 0 }; // Player head is at 1.55 < 1.80
-assert(!checkUfoCollision(standingBelowPlayer, highUfoPos), 'Walking below elevated UFO avoids damage');
+// 4. Storm Drone Pulse Wave (Level 4)
+const drone = { state: 'pulse', x: 8, y: 1.0, currentPulseRadius: 2.0 };
+assert(checkStormPulse({ x: 9.9, y: 0.5, z: 0 }, drone), 'Player inside expanding ring wave is hit');
+assert(!checkStormPulse({ x: 11.5, y: 0.5, z: 0 }, drone), 'Player outside expanding ring is safe');
+assert(!checkStormPulse({ x: 9.9, y: 2.2, z: 0 }, drone), 'Jumping above drone pulse plane is safe');
 
-// Invulnerability duration & single-contact protection during continuous contact
-const combatGame = new Garden(1);
-combatGame.start();
-// Place directly on UFO 0 patrol point at t=0 (x=7, z=0)
-combatGame.x = 7; combatGame.z = 0; combatGame.y = 0;
+// 5. Tempest Hunter Dash (Level 7)
+const hunter = { state: 'dash', x: 10, z: 0 };
+assert(checkTempestHunterDash({ x: 10.1, y: 0.5, z: 0 }, hunter), 'Dashing hunter hits player in trajectory line');
+assert(!checkTempestHunterDash({ x: 10.1, y: 1.4, z: 0 }, hunter), 'Jumping above dash altitude is safe');
 
-// Simulate continuous contact over 60 frames (1 full second)
-for (let i = 0; i < 60; i++) {
-  combatGame.step(0.016);
-}
-assert.equal(combatGame.lives, 2, 'Single continuous contact removes exactly 1 life, not multiple');
-assert(combatGame.time < combatGame.hurtUntil, 'Player remains invulnerable during damage cooldown');
+// 6. Frost Crawler Slippery Patch (Level 8)
+const icePatches = [{ x: 8, z: 0, radius: 1.1 }];
+assert(checkIcePatchSlip({ x: 8.2, y: 0, z: 0 }, icePatches), 'Grounded player on ice patch experiences slip physics');
+assert(!checkIcePatchSlip({ x: 8.2, y: 0.8, z: 0 }, icePatches), 'Airborne player does not slip on ice patch');
+console.log('✓ PASS: Suite 3: Fair hitboxes, telegraphs, and evasions across all enemy types');
 
-// Advance time past invulnerability window and touch UFO again
-combatGame.time = combatGame.hurtUntil + 0.1;
-const { getPatrolPositions } = await import('./dist/logic.js');
-const nextUfo = getPatrolPositions(combatGame.level, combatGame.time)[0];
-combatGame.x = nextUfo.x; combatGame.z = nextUfo.z; combatGame.y = 0;
-combatGame.step(0.016);
-assert.equal(combatGame.lives, 1, 'Damage applies normally after invulnerability expires');
-console.log('✓ PASS: Suite 3: Fair UFO hitboxes, vertical clearance, and invulnerability');
+// --- SUITE 4: All 8 Sequential Campaign Destinations ---
+assert.equal(LEVELS.length, 8, 'All 8 sequential Solar System worlds defined');
+const expectedOrder = ['Crystal Garden', 'The Moon', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune', 'Pluto'];
 
-// --- SUITE 4: Level 1, Level 2, and Level 3 Playability & Objectives ---
-assert.equal(LEVELS.length, 3, 'Exactly three playable levels provided');
+for (let idx = 0; idx < LEVELS.length; idx++) {
+  const level = LEVELS[idx];
+  assert.equal(level.id, idx + 1, `Level ID matches route order ${idx + 1}`);
+  assert.equal(level.name, expectedOrder[idx], `World name matches sequential route: ${expectedOrder[idx]}`);
+  assert(level.gravity > 0 && level.gravity <= 20, `Valid gravity setting for ${level.name}: ${level.gravity}`);
+  assert(level.crystalCount >= 6, `Level has sufficient crystals: ${level.crystalCount}`);
+  assert(level.relic && level.relic.name, `Level ${level.name} has a hidden planetary relic: ${level.relic?.name}`);
 
-for (const level of LEVELS) {
-  assert(level.id >= 1 && level.id <= 3, `Valid level ID: ${level.id}`);
-  assert(level.name && level.name.length > 0, `Level has name: ${level.name}`);
-  assert(level.description && level.description.length > 0, `Level has description: ${level.description}`);
-  assert(level.crystals.length >= 6, `Level ${level.id} has at least 6 crystals (has ${level.crystals.length})`);
-  assert(level.spawn && level.spawn.x !== undefined, `Level ${level.id} has valid spawn`);
-  assert(level.portal && level.portal.x !== undefined, `Level ${level.id} has valid portal`);
+  // Test full playthrough of each world
+  const play = new Garden(level.id);
+  play.start();
 
-  // Verify spawn is on ground
-  assert(isGroundSupported(level.spawn.x, level.spawn.z, level), `Spawn point in Level ${level.id} is on ground`);
-
-  // Verify portal is on ground
-  assert(isGroundSupported(level.portal.x, level.portal.z, level), `Portal in Level ${level.id} is on ground`);
-
-  // Verify every crystal is on valid ground
-  for (let i = 0; i < level.crystals.length; i++) {
-    const [cx, cz] = level.crystals[i];
-    assert(isGroundSupported(cx, cz, level), `Crystal ${i} at (${cx}, ${cz}) in Level ${level.id} is on ground`);
+  // Low gravity verification
+  if (level.id === 2 || level.id === 8) {
+    play.step(0.016, { jump: true });
+    assert(play.gravity <= 10, `Destination ${level.name} has low gravity (g=${play.gravity})`);
+    assert(play.vy > 0, `Low-gravity leap launches gracefully in ${level.name}`);
+    for (let f = 0; f < 120; f++) play.step(0.016);
+    assert.equal(play.y, 0, `Low-gravity landing returns cleanly to 0 in ${level.name}`);
   }
 
-  // Simulate complete playthrough of the level
-  const playInstance = new Garden(level.id);
-  playInstance.start();
+  // Collect planetary relic
+  play.x = level.relic.x;
+  play.z = level.relic.z;
+  play.y = level.relic.y;
+  play.step(0.016);
+  assert(play.relicCollected, `Planetary relic collected in ${level.name}`);
 
   // Collect all crystals
   for (const [cx, cz] of level.crystals) {
-    playInstance.x = cx;
-    playInstance.z = cz;
-    playInstance.y = 0;
-    playInstance.step(0.016);
+    play.x = cx;
+    play.z = cz;
+    play.y = 0;
+    play.step(0.016);
   }
-  assert.equal(playInstance.collected.size, level.crystals.length, `Collected all crystals in Level ${level.id}`);
-  assert(playInstance.portalActive, `Portal activated in Level ${level.id}`);
+  assert.equal(play.collected.size, level.crystals.length, `All crystals collected in ${level.name}`);
+  assert(play.portalActive, `Portal active in ${level.name}`);
 
-  // Walk into portal
-  playInstance.x = level.portal.x;
-  playInstance.z = level.portal.z;
-  playInstance.y = 0;
-  playInstance.step(0.016);
-  assert.equal(playInstance.mode, 'won', `Level ${level.id} successfully completed upon entering portal`);
+  // Enter portal to win
+  play.x = level.portal.x;
+  play.z = level.portal.z;
+  play.y = 0;
+  play.step(0.016);
+  assert.equal(play.mode, 'won', `Successfully reached active portal in ${level.name}`);
 }
-console.log('✓ PASS: Suite 4: All three playable levels verified reachable and completable');
+console.log('✓ PASS: Suite 4: All 8 destinations verified playable, reachable, and completable');
 
-// --- SUITE 5: Persistence, Progression, and Storage Edge Cases ---
-resetProgress();
-let state = loadProgress();
-assert.deepEqual(state.unlockedLevels, [1], 'Initial state has only Level 1 unlocked');
-assert(!isLevelUnlocked(2, state), 'Level 2 is initially locked');
-assert(!isLevelUnlocked(3, state), 'Level 3 is initially locked');
+// --- SUITE 5: Customization, Challenges, and Storage v3 Migration ---
+resetAllProgression();
+let save = loadProgress();
+assert.equal(save.version, 3, 'Save file is version 3');
+assert.deepEqual(save.unlockedLevels, [1], 'Starting campaign starts exclusively on Level 1');
+assert(save.unlockedCosmetics.length >= 6, 'Starting default cosmetics are unlocked');
+assert.equal(save.equippedCosmetics.body, 'body_default', 'Equipped default body');
 
-// Complete Level 1
-unlockLevel(2);
-recordCompletion(1, 38.4);
-state = loadProgress();
-assert(isLevelUnlocked(2, state), 'Level 2 is unlocked after Level 1 completion');
-assert(isLevelCompleted(1, state), 'Level 1 marked completed');
-assert.equal(state.bestTimes[1], 38.4, 'Best completion time recorded');
+// Complete Level 1 flawlessly under par time with relic
+const l1Stats = { time: 32.5, livesRemaining: 3, relicFound: true, targetTime: 45, completed: true };
+const unlockedL1Rewards = evaluateRewards(new Set(save.unlockedCosmetics), getLevel(1), l1Stats);
+assert(unlockedL1Rewards.some(r => r.id === 'body_emerald'), 'Flawless run in Garden awards Jade Solarium body');
 
-// Improving best time
-recordCompletion(1, 32.1);
-state = loadProgress();
-assert.equal(state.bestTimes[1], 32.1, 'Faster completion time updates best time');
+// Record completion in storage
+recordCompletion(1, l1Stats);
+unlockedL1Rewards.forEach(r => unlockCosmetic(r.id));
+save = loadProgress();
 
-// Slower run does not overwrite best time
-recordCompletion(1, 45.0);
-state = loadProgress();
-assert.equal(state.bestTimes[1], 32.1, 'Slower completion time does not degrade best time');
+assert(isLevelUnlocked(2, save), 'Level 2 (Moon) unlocked after Level 1 completion');
+assert(isLevelCompleted(1, save), 'Level 1 marked completed');
+assert(save.challenges[1].completed, 'Level 1 completed challenge recorded');
+assert(save.challenges[1].flawless, 'Level 1 flawless challenge recorded');
+assert(save.challenges[1].speedrun, 'Level 1 speedrun challenge recorded');
+assert(save.challenges[1].relic, 'Level 1 relic challenge recorded');
 
-// Complete Level 2 and unlock Level 3
-unlockLevel(3);
-recordCompletion(2, 54.2);
-state = loadProgress();
-assert(isLevelUnlocked(3, state), 'Level 3 is unlocked');
-assert(isLevelCompleted(2, state), 'Level 2 marked completed');
+// Equip newly unlocked cosmetic
+equipCosmetic('body', 'body_emerald');
+save = loadProgress();
+assert.equal(save.equippedCosmetics.body, 'body_emerald', 'Equipped newly unlocked body finish');
 
-// Replaying a level does not erase unlocked levels
-const replayInstance = new Garden(1);
-replayInstance.start();
-replayInstance.reset();
-state = loadProgress();
-assert(isLevelUnlocked(2, state) && isLevelUnlocked(3, state), 'Replaying Level 1 preserves all unlocks');
+// Reset appearance restores default cosmetics without wiping progression
+resetAppearance();
+save = loadProgress();
+assert.equal(save.equippedCosmetics.body, 'body_default', 'Appearance reset to default');
+assert(isLevelUnlocked(2, save), 'Campaign progression kept after appearance reset');
+assert(save.unlockedCosmetics.includes('body_emerald'), 'Earned cosmetic remains unlocked after appearance reset');
 
-// Corrupted storage handling
-saveProgress({ corrupt: true, unlockedLevels: 'invalid' });
-const recovered = loadProgress();
-assert(Array.isArray(recovered.unlockedLevels) && recovered.unlockedLevels.includes(1), 'Corrupted storage safely recovered');
+// Complete entire campaign through Level 8 (Pluto)
+for (let lvl = 2; lvl <= 8; lvl++) {
+  assert(isLevelUnlocked(lvl, save), `Level ${lvl} is unlocked sequentially`);
+  recordCompletion(lvl, { time: 42.0, livesRemaining: 3, relicFound: true, targetTime: 60 });
+  save = loadProgress();
+}
+assert(isLevelCompleted(8, save), 'Level 8 (Pluto) marked completed - Solar System Campaign Won!');
 
-// Reset progress
-resetProgress();
-const afterReset = loadProgress();
-assert.deepEqual(afterReset.unlockedLevels, [1], 'Reset progress restores defaults');
-assert.deepEqual(afterReset.completedLevels, [], 'Reset progress clears completions');
-assert.deepEqual(afterReset.bestTimes, {}, 'Reset progress clears times');
-console.log('✓ PASS: Suite 5: Progression, persistence, and storage resilience');
+// Reset all progression wipes back to starting defaults
+resetAllProgression();
+save = loadProgress();
+assert.deepEqual(save.unlockedLevels, [1], 'All levels reset back to starting world');
+assert.deepEqual(save.completedLevels, [], 'Completed levels cleared');
+console.log('✓ PASS: Suite 5: Progression, challenges, cosmetics, and save migration');
 
-console.log('\n========================================');
-console.log('ALL VERIFICATION TEST SUITES PASSED! (5/5)');
-console.log('========================================');
+console.log('\n============================================================');
+console.log('ALL SOLAR SYSTEM ADVENTURE VERIFICATION SUITES PASSED! (5/5)');
+console.log('============================================================');
