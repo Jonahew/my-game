@@ -1,6 +1,299 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#292737"><meta name="description" content="Explore floating gardens, collect six crystals, and find your way home. Play Crystal Garden in your browser."><title>Crystal Garden — Play</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%233bc7b4' d='m16 1 10 12-10 18L6 13Z'/%3E%3Cpath fill='%23d9fff0' d='m16 1 1 20-11-8Z'/%3E%3C/svg%3E"><link rel="stylesheet" href="./style.css"><script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script></head>
-<body><main id="game"><canvas id="world" aria-label="Crystal Garden 3D game"></canvas><header class="hud"><div class="wordmark"><span class="gem">◇</span> CRYSTAL GARDEN</div><div class="stats"><span id="energy">◇ 0 / 6</span><span id="lives" aria-label="3 lives">♥ ♥ ♥</span><span id="timer">0:00</span><button id="pause" aria-label="Pause game" disabled>Ⅱ</button><button id="sound" aria-label="Toggle sound" aria-pressed="false">Sound off</button></div></header>
-<div id="notice" role="status" aria-live="polite"></div><section id="panel" class="panel"><span class="eyebrow" id="eyebrow">A SMALL GARDEN AMONG THE STARS</span><h1 id="heading">Find your<br><i>way home.</i></h1><p id="description">Gather six energy crystals. Evade the patrols.<br>Bring the ancient portal back to life.</p><button id="begin" disabled>Growing your garden…</button><div class="keys">WASD / arrows <span>move</span> &nbsp; SPACE <span>jump</span><br>SHIFT <span>run</span> &nbsp; DRAG <span>look around</span></div></section>
-<div class="bottom"><span id="objective">EXPLORE · COLLECT · RETURN</span><span>Blender-crafted worlds</span></div><div id="touch"><div class="dpad"><button data-key="KeyW" aria-label="Move forward">↑</button><div><button data-key="KeyA" aria-label="Move left">←</button><button data-key="KeyS" aria-label="Move backward">↓</button><button data-key="KeyD" aria-label="Move right">→</button></div></div><button data-key="Space" aria-label="Jump" class="jump">Jump</button></div>
-</main><script type="module" src="./game.js"></script></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#292737">
+  <meta name="description" content="Explore floating celestial gardens, recover ancient energy crystals, evade patrolling sentinel drones, and navigate the starlight portal.">
+  <title>Crystal Garden — Iteration 2</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%233bc7b4' d='m16 1 10 12-10 18L6 13Z'/%3E%3Cpath fill='%23d9fff0' d='m16 1 1 20-11-8Z'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "./vendor/three.module.min.js"
+      }
+    }
+  </script>
+</head>
+<body>
+<main id="game">
+  <canvas id="world" aria-label="Crystal Garden 3D game view"></canvas>
+
+  <!-- Top HUD Bar -->
+  <header class="hud" role="region" aria-label="Game status">
+    <div class="hud-left">
+      <div class="wordmark"><span class="gem">◇</span> CRYSTAL GARDEN</div>
+      <div id="level-badge" class="level-badge">LEVEL 1</div>
+    </div>
+    <div class="stats">
+      <span id="energy" title="Crystals collected">◇ 0 / 6</span>
+      <span id="lives" aria-label="3 lives remaining" title="Remaining explorer energy">♥ ♥ ♥</span>
+      <span id="shield-indicator" class="shield-indicator hidden" title="Invulnerability shield active">🛡 INVULNERABLE</span>
+      <span id="timer" title="Elapsed level time">0:00</span>
+      <button id="map-btn" aria-label="Open Level Map">⬡ Map</button>
+      <button id="pause" aria-label="Pause game" disabled>Ⅱ</button>
+      <button id="sound" aria-label="Toggle sound" aria-pressed="false">Sound off</button>
+      <button id="debug-overlay-btn" class="debug-btn" aria-label="Toggle collision debug overlay" title="Toggle collision shapes overlay (Key: O)">Overlay: Off</button>
+    </div>
+  </header>
+
+  <!-- Notice banner -->
+  <div id="notice" role="status" aria-live="polite"></div>
+
+  <!-- Debug Readout (Developer Collision Overlay) -->
+  <aside id="debug-panel" class="debug-panel hidden" aria-label="Collision Debug Readout">
+    <div class="debug-title">DEVELOPER COLLISION OVERLAY</div>
+    <div class="debug-row"><span>Player XYZ:</span> <span id="dbg-player-pos">0.0, 0.0, 0.0</span></div>
+    <div class="debug-row"><span>Ground Support:</span> <span id="dbg-ground">YES</span></div>
+    <div class="debug-row"><span>Invulnerable:</span> <span id="dbg-invuln">NO</span></div>
+    <div class="debug-row"><span>Nearest UFO:</span> <span id="dbg-ufo-dist">--</span></div>
+    <div class="debug-row"><span>Footprint:</span> <span>R = 0.28</span></div>
+    <div class="debug-row"><span>Hitbox Mode:</span> <span>3D Cylinders</span></div>
+    <div class="debug-hint">Press <b>O</b> to toggle overlay</div>
+  </aside>
+
+  <!-- Start / Intro Panel -->
+  <section id="panel" class="panel">
+    <span class="eyebrow" id="eyebrow">A CELESTIAL GARDEN AMONG THE STARS</span>
+    <h1 id="heading">Find your<br><i>way home.</i></h1>
+    <p id="description">Gather energy crystals, evade the sentinel drones, and awaken the ancient starlight portal.</p>
+    <div class="panel-buttons">
+      <button id="begin" disabled class="btn-primary">Growing your garden…</button>
+      <button id="open-map-intro" class="btn-secondary">Level Map</button>
+    </div>
+    <div class="keys">
+      WASD / arrows <span>move</span> &nbsp; SPACE <span>jump</span> &nbsp; SHIFT <span>run</span><br>
+      DRAG <span>look around</span> &nbsp; M <span>map</span> &nbsp; ESC <span>pause</span> &nbsp; O <span>collision view</span>
+    </div>
+  </section>
+
+  <!-- Interactive Level Map Modal -->
+  <div id="map-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="map-title">
+    <div class="map-container">
+      <div class="map-header">
+        <div>
+          <span class="map-eyebrow">CELESTIAL ARCHIPELAGO</span>
+          <h2 id="map-title" class="map-title">Level Progression Map</h2>
+        </div>
+        <div class="map-header-actions">
+          <button id="close-map-btn" class="modal-close" aria-label="Close Map">✕</button>
+        </div>
+      </div>
+
+      <!-- SVG Map Canvas with Interactive Islands -->
+      <div class="map-world">
+        <svg class="map-svg" viewBox="0 0 760 380" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <linearGradient id="pathGradientActive" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#3bc7b4" />
+              <stop offset="100%" stop-color="#ffd166" />
+            </linearGradient>
+            <linearGradient id="pathGradientLocked" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#55516a" />
+              <stop offset="100%" stop-color="#3d3a4d" />
+            </linearGradient>
+            <filter id="glowEffect" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+          </defs>
+
+          <!-- Cosmic background stars and nebulae -->
+          <g class="map-stars" opacity="0.6">
+            <circle cx="50" cy="40" r="1.5" fill="#fff" />
+            <circle cx="140" cy="110" r="1.2" fill="#c5e6c6" />
+            <circle cx="280" cy="50" r="1.8" fill="#ffd166" />
+            <circle cx="430" cy="90" r="1.5" fill="#fff" />
+            <circle cx="610" cy="60" r="2.0" fill="#8bffdf" />
+            <circle cx="680" cy="180" r="1.2" fill="#fff" />
+            <circle cx="100" cy="320" r="1.8" fill="#fff" />
+            <circle cx="340" cy="330" r="1.4" fill="#c5e6c6" />
+            <circle cx="540" cy="310" r="1.6" fill="#8bffdf" />
+          </g>
+
+          <!-- Connecting progression paths -->
+          <path id="map-path-1-2" class="map-path" d="M 170 190 Q 275 110 380 190" />
+          <path id="map-path-2-3" class="map-path" d="M 380 190 Q 485 270 590 190" />
+
+          <!-- Island 1 Node -->
+          <g id="map-node-1" class="map-node" tabindex="0" role="button" aria-label="Level 1: Crystal Garden">
+            <circle class="island-shadow" cx="170" cy="200" r="58" />
+            <circle class="island-base" cx="170" cy="190" r="54" />
+            <circle class="island-core" cx="170" cy="190" r="44" />
+            <text class="island-num" x="170" y="178">LEVEL 1</text>
+            <text class="island-title" x="170" y="200">Crystal Garden</text>
+            <g class="island-status-icon" transform="translate(170, 222)"></g>
+          </g>
+
+          <!-- Island 2 Node -->
+          <g id="map-node-2" class="map-node" tabindex="0" role="button" aria-label="Level 2: Skyway Crossing">
+            <circle class="island-shadow" cx="380" cy="200" r="58" />
+            <circle class="island-base" cx="380" cy="190" r="54" />
+            <circle class="island-core" cx="380" cy="190" r="44" />
+            <text class="island-num" x="380" y="178">LEVEL 2</text>
+            <text class="island-title" x="380" y="200">Skyway Crossing</text>
+            <g class="island-status-icon" transform="translate(380, 222)"></g>
+          </g>
+
+          <!-- Island 3 Node -->
+          <g id="map-node-3" class="map-node" tabindex="0" role="button" aria-label="Level 3: The Far Garden">
+            <circle class="island-shadow" cx="590" cy="200" r="58" />
+            <circle class="island-base" cx="590" cy="190" r="54" />
+            <circle class="island-core" cx="590" cy="190" r="44" />
+            <text class="island-num" x="590" y="178">LEVEL 3</text>
+            <text class="island-title" x="590" y="200">The Far Garden</text>
+            <g class="island-status-icon" transform="translate(590, 222)"></g>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Level Details & Play Section -->
+      <div id="map-card" class="map-card">
+        <div class="map-card-info">
+          <div class="map-card-header">
+            <div>
+              <span id="card-state-badge" class="badge">UNLOCKED</span>
+              <h3 id="card-title">Level 1 — Crystal Garden</h3>
+              <div id="card-subtitle" class="card-subtitle">The Ancient Courtyard</div>
+            </div>
+            <div id="card-best-time" class="card-best-time">Best: —</div>
+          </div>
+          <p id="card-description">Gather six energy crystals scattered across four celestial islands. Watch for the sentinel drones guarding the stone walkways.</p>
+          <div class="card-meta">
+            <span id="card-objective">◇ 6 Crystals to Recover</span>
+            <span id="card-lock-reason" class="lock-reason hidden">Complete previous level to unlock</span>
+          </div>
+        </div>
+        <div class="map-card-actions">
+          <button id="card-play-btn" class="btn-primary">Play Level</button>
+        </div>
+      </div>
+
+      <div class="map-footer">
+        <div class="storage-notice">
+          <span>💾 Progress saved locally on this browser/device.</span>
+        </div>
+        <button id="reset-progress-btn" class="btn-text-danger">Reset Progress</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level Completion Screen -->
+  <div id="completion-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="completion-heading">
+    <div class="modal-dialog">
+      <span class="eyebrow" id="completion-eyebrow">PORTAL ENTERED · LEVEL COMPLETE</span>
+      <h2 id="completion-heading">Welcome<br><i>home.</i></h2>
+      <p id="completion-summary">The crystals resonated with the ancient portal and opened the starlight pathway.</p>
+
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-label">Crystals Recovered</span>
+          <span id="comp-crystals" class="stat-value">6 / 6</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Completion Time</span>
+          <span id="comp-time" class="stat-value">0:38.2</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-label">Best Time</span>
+          <span id="comp-best" class="stat-value">0:38.2</span>
+        </div>
+      </div>
+
+      <div id="unlock-announcement" class="unlock-announcement">
+        <div class="unlock-icon">✦</div>
+        <div class="unlock-text">
+          <span class="unlock-eyebrow">NEW DESTINATION DISCOVERED</span>
+          <span id="unlock-name" class="unlock-title">Level 2 — Skyway Crossing</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="comp-next-btn" class="btn-primary">Next Level ▷</button>
+        <button id="comp-map-btn" class="btn-secondary">Level Map ⬡</button>
+        <button id="comp-replay-btn" class="btn-secondary">Replay ↺</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grand Adventure-Complete Screen (After Level 3) -->
+  <div id="adventure-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="adv-heading">
+    <div class="modal-dialog adventure-dialog">
+      <span class="eyebrow">THE CELESTIAL ODYSSEY IS COMPLETE</span>
+      <h2 id="adv-heading">The Stars Are<br><i>Restored.</i></h2>
+      <p>Every sanctuary has been awakened. The floating gardens now drift peacefully among the stars, safe from sentinel drones.</p>
+
+      <div class="adventure-awards">
+        <div class="award-card">
+          <span class="award-icon">✦</span>
+          <span class="award-title">All 3 Gardens Restored</span>
+        </div>
+        <div class="award-card">
+          <span class="award-icon">◇</span>
+          <span class="award-title">19 Crystals Reunited</span>
+        </div>
+        <div class="award-card">
+          <span class="award-icon">♥</span>
+          <span class="award-title">Master Explorer</span>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="adv-map-btn" class="btn-primary">Explore Level Map ⬡</button>
+        <button id="adv-replay-btn" class="btn-secondary">Replay The Far Garden ↺</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pause Menu Modal -->
+  <div id="pause-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="pause-heading">
+    <div class="modal-dialog">
+      <span class="eyebrow">YOUR GARDEN IS WAITING</span>
+      <h2 id="pause-heading">Take a<br><i>breath.</i></h2>
+      <p id="pause-level-info">Level 1 — Crystal Garden</p>
+
+      <div class="modal-actions-vertical">
+        <button id="pause-resume-btn" class="btn-primary">Resume Exploring</button>
+        <button id="pause-restart-btn" class="btn-secondary">Restart Level</button>
+        <button id="pause-map-btn" class="btn-secondary">Level Map</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset Progress Confirmation Dialog -->
+  <div id="confirm-reset-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="reset-heading">
+    <div class="modal-dialog confirm-dialog">
+      <span class="eyebrow danger-eyebrow">RESET PROGRESS</span>
+      <h2 id="reset-heading">Clear Saved<br><i>Journey?</i></h2>
+      <p>This will reset all unlocked levels and best completion times on this device. This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button id="confirm-reset-cancel" class="btn-secondary">Cancel</button>
+        <button id="confirm-reset-yes" class="btn-danger">Yes, Reset Progress</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom info bar -->
+  <div class="bottom">
+    <span id="objective">EXPLORE · COLLECT · ENTER PORTAL</span>
+    <span>Blender-crafted worlds · Three.js</span>
+  </div>
+
+  <!-- Touch Controls -->
+  <div id="touch">
+    <div class="dpad">
+      <button data-key="KeyW" aria-label="Move forward">↑</button>
+      <div>
+        <button data-key="KeyA" aria-label="Move left">←</button>
+        <button data-key="KeyS" aria-label="Move backward">↓</button>
+        <button data-key="KeyD" aria-label="Move right">→</button>
+      </div>
+    </div>
+    <button data-key="Space" aria-label="Jump" class="jump">Jump</button>
+  </div>
+</main>
+
+<script type="module" src="./game.js"></script>
+</body>
+</html>

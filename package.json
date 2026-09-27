@@ -1,0 +1,11 @@
+{
+  "name": "crystal-garden",
+  "version": "2.0.0",
+  "type": "module",
+  "imports": {
+    "three": "./dist/vendor/three.module.min.js"
+  },
+  "scripts": {
+    "test": "node verify.mjs"
+  }
+}
