@@ -1224,6 +1224,11 @@ async function init() {
     } catch (e) {}
   }
 
+  window.state = state;
+  window.hero = hero;
+  window.buildLevelScene = buildLevelScene;
+  window.begin = begin;
+
   resize();
   setupEventListeners();
   renderer.setAnimationLoop(frame);

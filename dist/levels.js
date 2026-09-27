@@ -141,7 +141,7 @@ export const LEVELS = [
     crystalCount: 6,
     spawn: { x: 0, y: 0, z: -2 },
     portal: { x: 30, y: 0, z: 30 },
-    relic: { x: -4, y: 0.5, z: 28, name: 'Martian Silicate Fossil' },
+    relic: { x: -3.0, y: 0.5, z: 18.0, name: 'Martian Silicate Fossil' },
     islands: [
       { x: 0, z: 0, radius: 6.0, name: 'Chryse Base' },
       { x: 15, z: 0, radius: 5.5, name: 'Ochre Ridge' },
@@ -393,7 +393,7 @@ export const LEVELS = [
     crystalCount: 7,
     spawn: { x: 0, y: 0, z: -2 },
     portal: { x: 30, y: 0, z: 30 },
-    relic: { x: 24, y: 0.5, z: 12, name: 'Great Dark Spot Pearl' },
+    relic: { x: 32.5, y: 0.5, z: 14.5, name: 'Great Dark Spot Pearl' },
     islands: [
       { x: 0, z: 0, radius: 6.0, name: 'Storm Anchorage' },
       { x: 16, z: 0, radius: 5.5, name: 'Methane Pier' },
