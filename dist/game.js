@@ -1189,6 +1189,7 @@ function setupEventListeners() {
   $('begin').onclick = begin;
   $('open-map-intro').onclick = () => openLevelMap('intro');
   $('open-customize-intro').onclick = () => openCustomizeScreen('intro');
+  $('customize-hud-btn').onclick = () => openCustomizeScreen(state.mode === 'playing' ? 'playing' : (state.mode === 'paused' ? 'paused' : 'intro'));
   $('map-btn').onclick = () => openLevelMap('playing');
   $('open-customize-from-map').onclick = () => {
     openCustomizeScreen('map');
@@ -1369,7 +1370,7 @@ function setupEventListeners() {
       if ($('map-modal').classList.contains('hidden')) openLevelMap();
       else closeLevelMap();
     }
-    if (e.code === 'KeyC') {
+    if (e.code === 'KeyC' || e.code === 'KeyG') {
       if ($('customize-modal').classList.contains('hidden')) openCustomizeScreen();
       else closeCustomizeScreen();
     }
