@@ -781,13 +781,25 @@ function begin() {
   canvas.focus();
 }
 
+let mapOrigin = null;
+
 // Interactive Solar System Map Open & Sync
-function openLevelMap() {
+function openLevelMap(origin) {
+  if (origin) {
+    mapOrigin = origin;
+  } else if (!mapOrigin) {
+    if (state.mode === 'playing') mapOrigin = 'playing';
+    else if (state.mode === 'paused') mapOrigin = 'paused';
+    else if (state.mode === 'intro') mapOrigin = 'intro';
+    else mapOrigin = 'other';
+  }
+
   if (state.mode === 'playing') {
     state.pause();
   }
   $('pause-modal').classList.add('hidden');
   $('completion-modal').classList.add('hidden');
+  $('adventure-modal').classList.add('hidden');
   $('customize-modal').classList.add('hidden');
   const prog = loadProgress();
 
@@ -831,6 +843,24 @@ function openLevelMap() {
 
   updateMapCard(selectedMapLevel);
   $('map-modal').classList.remove('hidden');
+}
+
+function closeLevelMap() {
+  $('map-modal').classList.add('hidden');
+  const origin = mapOrigin;
+  mapOrigin = null;
+
+  if (origin === 'playing') {
+    state.start();
+  } else if (origin === 'paused') {
+    $('pause-modal').classList.remove('hidden');
+  } else if (origin === 'completion') {
+    $('completion-modal').classList.remove('hidden');
+  } else if (origin === 'adventure') {
+    $('adventure-modal').classList.remove('hidden');
+  }
+  sync();
+  canvas.focus();
 }
 
 function selectMapLevel(id) {
@@ -949,15 +979,49 @@ function renderPreviewFrame() {
   }
 }
 
-function openCustomizeScreen() {
+let customizeOrigin = null;
+
+function openCustomizeScreen(origin) {
+  if (origin) {
+    customizeOrigin = origin;
+  } else if (!customizeOrigin) {
+    if (!$('map-modal').classList.contains('hidden')) customizeOrigin = 'map';
+    else if (state.mode === 'playing') customizeOrigin = 'playing';
+    else if (state.mode === 'paused') customizeOrigin = 'paused';
+    else if (!$('completion-modal').classList.contains('hidden')) customizeOrigin = 'completion';
+    else if (!$('adventure-modal').classList.contains('hidden')) customizeOrigin = 'adventure';
+    else customizeOrigin = 'intro';
+  }
+
   if (state.mode === 'playing') state.pause();
   $('pause-modal').classList.add('hidden');
   $('completion-modal').classList.add('hidden');
+  $('adventure-modal').classList.add('hidden');
   $('map-modal').classList.add('hidden');
 
   applyCosmeticsToModel(previewHero);
   renderCustomizationCatalog();
   $('customize-modal').classList.remove('hidden');
+}
+
+function closeCustomizeScreen() {
+  $('customize-modal').classList.add('hidden');
+  const origin = customizeOrigin;
+  customizeOrigin = null;
+
+  if (origin === 'map') {
+    openLevelMap();
+  } else if (origin === 'playing') {
+    state.start();
+  } else if (origin === 'paused') {
+    $('pause-modal').classList.remove('hidden');
+  } else if (origin === 'completion') {
+    $('completion-modal').classList.remove('hidden');
+  } else if (origin === 'adventure') {
+    $('adventure-modal').classList.remove('hidden');
+  }
+  sync();
+  canvas.focus();
 }
 
 function renderCustomizationCatalog() {
@@ -1123,19 +1187,28 @@ async function init() {
 // Event Listeners for UI, Controls, and Keyboard
 function setupEventListeners() {
   $('begin').onclick = begin;
-  $('open-map-intro').onclick = openLevelMap;
-  $('open-customize-intro').onclick = openCustomizeScreen;
-  $('map-btn').onclick = openLevelMap;
-  let customizeOpenedFromMap = false;
+  $('open-map-intro').onclick = () => openLevelMap('intro');
+  $('open-customize-intro').onclick = () => openCustomizeScreen('intro');
+  $('map-btn').onclick = () => openLevelMap('playing');
   $('open-customize-from-map').onclick = () => {
-    customizeOpenedFromMap = true;
-    openCustomizeScreen();
+    openCustomizeScreen('map');
+  };
+  $('close-map-btn').onclick = () => {
+    closeLevelMap();
   };
   $('close-customize-btn').onclick = () => {
-    $('customize-modal').classList.add('hidden');
-    if (customizeOpenedFromMap) {
-      customizeOpenedFromMap = false;
-      openLevelMap();
+    closeCustomizeScreen();
+  };
+
+  // Backdrop click to dismiss modals
+  $('map-modal').onclick = (e) => {
+    if (e.target === $('map-modal')) {
+      closeLevelMap();
+    }
+  };
+  $('customize-modal').onclick = (e) => {
+    if (e.target === $('customize-modal')) {
+      closeCustomizeScreen();
     }
   };
 
@@ -1167,8 +1240,13 @@ function setupEventListeners() {
   };
 
   $('pause').onclick = () => {
-    if (state.mode === 'playing') state.pause();
-    else if (state.mode === 'paused') state.start();
+    if (state.mode === 'playing') {
+      state.pause();
+      $('pause-modal').classList.remove('hidden');
+    } else if (state.mode === 'paused') {
+      state.start();
+      $('pause-modal').classList.add('hidden');
+    }
     sync();
   };
 
@@ -1187,7 +1265,7 @@ function setupEventListeners() {
     state.start();
     sync();
   };
-  $('pause-custom-btn').onclick = openCustomizeScreen;
+  $('pause-custom-btn').onclick = () => openCustomizeScreen('paused');
   $('pause-restart-btn').onclick = () => {
     $('pause-modal').classList.add('hidden');
     state.reset();
@@ -1195,7 +1273,7 @@ function setupEventListeners() {
   };
   $('pause-map-btn').onclick = () => {
     $('pause-modal').classList.add('hidden');
-    openLevelMap();
+    openLevelMap('paused');
   };
 
   // Completion buttons
@@ -1208,9 +1286,9 @@ function setupEventListeners() {
   };
   $('comp-map-btn').onclick = () => {
     $('completion-modal').classList.add('hidden');
-    openLevelMap();
+    openLevelMap('completion');
   };
-  $('comp-custom-btn').onclick = openCustomizeScreen;
+  $('comp-custom-btn').onclick = () => openCustomizeScreen('completion');
   $('comp-replay-btn').onclick = () => {
     $('completion-modal').classList.add('hidden');
     state.reset();
@@ -1220,9 +1298,9 @@ function setupEventListeners() {
   // Adventure complete buttons
   $('adv-map-btn').onclick = () => {
     $('adventure-modal').classList.add('hidden');
-    openLevelMap();
+    openLevelMap('adventure');
   };
-  $('adv-custom-btn').onclick = openCustomizeScreen;
+  $('adv-custom-btn').onclick = () => openCustomizeScreen('adventure');
   $('adv-replay-btn').onclick = () => {
     $('adventure-modal').classList.add('hidden');
     buildLevelScene(8);
@@ -1270,26 +1348,30 @@ function setupEventListeners() {
       e.preventDefault();
     }
     if (e.code === 'Escape') {
-      if (!$('customize-modal').classList.contains('hidden')) {
-        $('customize-modal').classList.add('hidden');
+      if (!$('confirm-reset-modal').classList.contains('hidden')) {
+        $('confirm-reset-modal').classList.add('hidden');
+      } else if (!$('customize-modal').classList.contains('hidden')) {
+        closeCustomizeScreen();
       } else if (!$('map-modal').classList.contains('hidden')) {
-        $('map-modal').classList.add('hidden');
+        closeLevelMap();
       } else if (!$('completion-modal').classList.contains('hidden')) {
         $('completion-modal').classList.add('hidden');
       } else if (state.mode === 'playing') {
         state.pause();
+        $('pause-modal').classList.remove('hidden');
       } else if (state.mode === 'paused') {
         state.start();
+        $('pause-modal').classList.add('hidden');
       }
       sync();
     }
     if (e.code === 'KeyM') {
       if ($('map-modal').classList.contains('hidden')) openLevelMap();
-      else $('map-modal').classList.add('hidden');
+      else closeLevelMap();
     }
     if (e.code === 'KeyC') {
       if ($('customize-modal').classList.contains('hidden')) openCustomizeScreen();
-      else $('customize-modal').classList.add('hidden');
+      else closeCustomizeScreen();
     }
     if (e.code === 'KeyO') {
       toggleCollisionOverlay();
