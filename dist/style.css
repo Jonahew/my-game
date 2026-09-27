@@ -186,14 +186,11 @@ body {
 }
 
 #pause {
-  font-weight: 900;
-  padding: 6px 12px;
-  border-radius: 50%;
-  width: 34px;
-  height: 34px;
-  display: flex;
+  font-weight: 700;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 }
 
 /* --- Developer Collision Debug Overlay Panel --- */
@@ -487,6 +484,192 @@ h1 i {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* --- In-Game Main Menu Screen --- */
+.main-menu-dialog {
+  max-width: 600px;
+  width: 95%;
+  background: rgba(18, 20, 34, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 20px;
+  padding: 24px 30px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 40px rgba(59, 199, 180, 0.15);
+  text-align: left;
+}
+
+.main-menu-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.main-menu-title {
+  margin: 4px 0 0 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.main-menu-title i {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--primary-accent);
+}
+
+.main-menu-dossier {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.dossier-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  padding-bottom: 10px;
+}
+
+.dossier-label {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+  color: var(--primary-accent);
+  display: block;
+}
+
+.dossier-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: #fff;
+  margin-top: 2px;
+}
+
+.dossier-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.dossier-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dossier-stat-label {
+  font-size: 11px;
+  color: #8c90a4;
+  font-weight: 600;
+}
+
+.dossier-stat-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: #ffd166;
+}
+
+.main-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.main-menu-btn {
+  display: flex !important;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 12px 18px !important;
+  border-radius: 12px !important;
+  text-align: left;
+  transition: all 0.18s ease;
+  position: relative;
+}
+
+.main-menu-btn .btn-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.main-menu-btn .btn-text-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.main-menu-btn .btn-main-text {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.main-menu-btn .btn-subtext {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.75;
+  margin-top: 2px;
+}
+
+.main-menu-btn .btn-shortcut {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  color: #c0c3d4;
+  letter-spacing: 0.5px;
+}
+
+.main-menu-btn:hover {
+  transform: translateX(4px);
+}
+
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #e2e4ed !important;
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.main-menu-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.quick-toggles {
+  display: flex;
+  gap: 8px;
+}
+
+.main-menu-hints {
+  font-size: 11px;
+  color: #8c90a4;
+}
+
+.main-menu-hints span {
+  color: #fff;
+  font-weight: 600;
 }
 
 .modal-close {

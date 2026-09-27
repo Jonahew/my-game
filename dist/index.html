@@ -35,7 +35,7 @@
       <span id="timer" title="Elapsed level time">0:00</span>
       <button id="customize-hud-btn" class="hud-btn" aria-label="Customize Explorer">👗 Gear</button>
       <button id="map-btn" class="hud-btn" aria-label="Open Solar System Map">⬡ Map</button>
-      <button id="pause" aria-label="Pause game" disabled>Ⅱ</button>
+      <button id="pause" class="hud-btn" aria-label="Open Main Menu" disabled>☰ Menu</button>
       <button id="sound" aria-label="Toggle sound" aria-pressed="false">Sound off</button>
       <button id="debug-overlay-btn" class="debug-btn" aria-label="Toggle collision debug overlay" title="Toggle collision shapes overlay (Key: O)">Overlay: Off</button>
     </div>
@@ -398,18 +398,103 @@
     </div>
   </div>
 
-  <!-- Pause Menu Modal -->
+  <!-- In-Game Main Menu Screen -->
   <div id="pause-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="pause-heading">
-    <div class="modal-dialog">
-      <span class="eyebrow">EXPEDITION ON HOLD</span>
-      <h2 id="pause-heading">Mission<br><i>Paused.</i></h2>
-      <p id="pause-level-info">Level 1 — Crystal Garden</p>
+    <div class="modal-dialog main-menu-dialog">
+      <!-- Main Menu Header -->
+      <div class="main-menu-header">
+        <div>
+          <span class="eyebrow">EXPEDITION ON HOLD · SYSTEM MENU</span>
+          <h2 id="pause-heading" class="main-menu-title">Main <i>Menu</i></h2>
+        </div>
+        <button id="close-pause-btn" class="modal-close" aria-label="Resume Expedition">✕</button>
+      </div>
 
-      <div class="modal-actions-vertical">
-        <button id="pause-resume-btn" class="btn-primary">Resume Expedition</button>
-        <button id="pause-custom-btn" class="btn-secondary">Customize Explorer 👗</button>
-        <button id="pause-restart-btn" class="btn-secondary">Restart Level</button>
-        <button id="pause-map-btn" class="btn-secondary">Solar System Map ⬡</button>
+      <!-- Active Expedition Status Dossier -->
+      <div class="main-menu-dossier">
+        <div class="dossier-top">
+          <div class="dossier-world">
+            <span class="dossier-label">ACTIVE EXPEDITION</span>
+            <div id="pause-level-info" class="dossier-name">Level 1 — Crystal Garden</div>
+          </div>
+          <span id="pause-gravity-badge" class="gravity-badge">g: 20 m/s²</span>
+        </div>
+        <div class="dossier-stats-grid">
+          <div class="dossier-stat">
+            <span class="dossier-stat-label">Crystals</span>
+            <span id="pause-energy" class="dossier-stat-val">◇ 0 / 6</span>
+          </div>
+          <div class="dossier-stat">
+            <span class="dossier-stat-label">Energy Hearts</span>
+            <span id="pause-lives" class="dossier-stat-val">♥ ♥ ♥</span>
+          </div>
+          <div class="dossier-stat">
+            <span class="dossier-stat-label">Mission Time</span>
+            <span id="pause-time" class="dossier-stat-val">0:00</span>
+          </div>
+          <div class="dossier-stat">
+            <span class="dossier-stat-label">Secret Relic</span>
+            <span id="pause-relic" class="dossier-stat-val">Not Found</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Navigation Actions -->
+      <div class="main-menu-actions">
+        <button id="pause-resume-btn" class="btn-primary main-menu-btn">
+          <span class="btn-icon">▶</span>
+          <span class="btn-text-wrap">
+            <span class="btn-main-text">Resume Expedition</span>
+            <span class="btn-subtext">Return to active exploration</span>
+          </span>
+          <span class="btn-shortcut">ESC</span>
+        </button>
+
+        <button id="pause-map-btn" class="btn-secondary main-menu-btn">
+          <span class="btn-icon">⬡</span>
+          <span class="btn-text-wrap">
+            <span class="btn-main-text">Solar System Map</span>
+            <span class="btn-subtext">Browse orbital route & objectives</span>
+          </span>
+          <span class="btn-shortcut">M</span>
+        </button>
+
+        <button id="pause-custom-btn" class="btn-secondary main-menu-btn">
+          <span class="btn-icon">👗</span>
+          <span class="btn-text-wrap">
+            <span class="btn-main-text">Customize Explorer</span>
+            <span class="btn-subtext">3D turntable & equipment loadout</span>
+          </span>
+          <span class="btn-shortcut">G</span>
+        </button>
+
+        <button id="pause-restart-btn" class="btn-secondary main-menu-btn">
+          <span class="btn-icon">↺</span>
+          <span class="btn-text-wrap">
+            <span class="btn-main-text">Restart Destination</span>
+            <span class="btn-subtext">Reset current world run</span>
+          </span>
+          <span class="btn-shortcut">R</span>
+        </button>
+
+        <button id="pause-title-btn" class="btn-ghost main-menu-btn">
+          <span class="btn-icon">🏠</span>
+          <span class="btn-text-wrap">
+            <span class="btn-main-text">Return to Title Screen</span>
+            <span class="btn-subtext">Go back to expedition start screen</span>
+          </span>
+        </button>
+      </div>
+
+      <!-- Quick Toggles & Keyboard Controls Footer -->
+      <div class="main-menu-footer">
+        <div class="quick-toggles">
+          <button id="pause-sound-btn" class="btn-ghost-sm">Sound: On</button>
+          <button id="pause-overlay-btn" class="btn-ghost-sm">Collision Overlay: Off</button>
+        </div>
+        <div class="main-menu-hints">
+          WASD <span>move</span> &nbsp; SPACE <span>jump</span> &nbsp; SHIFT <span>run</span> &nbsp; DRAG <span>look</span>
+        </div>
       </div>
     </div>
   </div>

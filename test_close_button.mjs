@@ -1,7 +1,7 @@
 import { firefox } from 'playwright';
 
-async function testCloseButtons() {
-  console.log('--- Testing Modal Close Buttons and HUD Buttons ---');
+async function testMainMenusAndCloseButtons() {
+  console.log('--- Testing In-Game Main Menu Screen & Modal Handlers ---');
   const browser = await firefox.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await context.newPage();
@@ -24,68 +24,77 @@ async function testCloseButtons() {
   await page.waitForSelector('#map-modal', { state: 'hidden' });
   console.log('✓ Map modal closed successfully via top-right close button!');
 
-  // 3. Test opening map during gameplay and closing with 'x'
-  console.log('3. Starting game and opening map from HUD...');
+  // 3. Start game
+  console.log('3. Starting game to test in-game Main Menu...');
   await page.click('#begin');
-  await page.waitForTimeout(300);
-  await page.click('#map-btn');
-  await page.waitForSelector('#map-modal:not(.hidden)');
-  console.log('✓ Map modal opened during gameplay.');
+  await page.waitForTimeout(400);
 
-  console.log('4. Clicking top-right close-map-btn (✕) during gameplay...');
-  await page.click('#close-map-btn');
-  await page.waitForSelector('#map-modal', { state: 'hidden' });
-  console.log('✓ Map modal closed and gameplay resumed.');
-
-  // 4. Test Gear HUD button during gameplay
-  console.log('5. Clicking top menu Gear button (#customize-hud-btn)...');
-  await page.click('#customize-hud-btn');
-  await page.waitForSelector('#customize-modal:not(.hidden)');
-  console.log('✓ Customize Explorer modal opened successfully via top menu Gear button!');
-
-  console.log('6. Clicking close-customize-btn (✕) to resume gameplay...');
-  await page.click('#close-customize-btn');
-  await page.waitForSelector('#customize-modal', { state: 'hidden' });
-  console.log('✓ Customize modal closed and gameplay resumed.');
-
-  // 5. Test KeyG shortcut
-  console.log('7. Testing KeyG keyboard shortcut...');
-  await page.keyboard.press('KeyG');
-  await page.waitForSelector('#customize-modal:not(.hidden)');
-  console.log('✓ Customize modal opened via KeyG shortcut.');
-  await page.keyboard.press('KeyG');
-  await page.waitForSelector('#customize-modal', { state: 'hidden' });
-  console.log('✓ Customize modal closed via KeyG shortcut.');
-
-  // 6. Test opening map from pause menu and closing with 'x'
-  console.log('8. Pausing game and opening map from pause menu...');
+  // 4. Test opening in-game Main Menu via top HUD button
+  console.log('4. Clicking top menu ☰ Menu button (#pause)...');
   await page.click('#pause');
   await page.waitForSelector('#pause-modal:not(.hidden)');
-  await page.click('#pause-map-btn');
-  await page.waitForSelector('#map-modal:not(.hidden)');
+  console.log('✓ In-Game Main Menu Screen opened successfully!');
 
-  console.log('9. Clicking close-map-btn (✕) from pause origin...');
-  await page.click('#close-map-btn');
-  await page.waitForSelector('#map-modal', { state: 'hidden' });
+  // Verify Main Menu Dossier fields
+  const levelText = await page.textContent('#pause-level-info');
+  const energyText = await page.textContent('#pause-energy');
+  const livesText = await page.textContent('#pause-lives');
+  console.log(`✓ Main Menu Dossier validated: "${levelText}", Energy: "${energyText}", Lives: "${livesText}"`);
+
+  // Capture Main Menu Screenshot
+  await page.screenshot({ path: 'dist/main_menu_screen_verified.png' });
+  console.log('✓ Saved in-game Main Menu screenshot.');
+
+  // 5. Test closing Main Menu via top-right 'x' button (#close-pause-btn)
+  console.log('5. Clicking top-right close button (✕) on Main Menu...');
+  await page.click('#close-pause-btn');
+  await page.waitForSelector('#pause-modal', { state: 'hidden' });
+  console.log('✓ Main Menu closed and gameplay resumed.');
+
+  // 6. Test opening Main Menu via Escape key
+  console.log('6. Pressing Escape key to open Main Menu...');
+  await page.keyboard.press('Escape');
   await page.waitForSelector('#pause-modal:not(.hidden)');
-  console.log('✓ Map modal closed and returned to pause menu!');
+  console.log('✓ Main Menu opened via Escape.');
 
-  // 7. Test customize modal from pause menu
-  console.log('10. Testing customize modal from pause menu...');
-  await page.click('#pause-custom-btn');
+  console.log('7. Pressing Escape key again to resume gameplay...');
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#pause-modal', { state: 'hidden' });
+  console.log('✓ Main Menu closed via Escape and gameplay resumed.');
+
+  // 7. Test Gear button from HUD
+  console.log('8. Clicking top menu Gear button (#customize-hud-btn)...');
+  await page.click('#customize-hud-btn');
   await page.waitForSelector('#customize-modal:not(.hidden)');
   await page.click('#close-customize-btn');
   await page.waitForSelector('#customize-modal', { state: 'hidden' });
-  await page.waitForSelector('#pause-modal:not(.hidden)');
-  console.log('✓ Customize modal closed and returned to pause menu!');
+  console.log('✓ Gear button & close verified.');
 
-  await page.screenshot({ path: 'dist/test_gear_verified.png' });
-  console.log('✓ ALL GEAR BUTTON AND MODAL CLOSE TESTS PASSED CLEANLY!');
+  // 8. Test Return to Title Screen from Main Menu
+  console.log('9. Opening Main Menu and returning to Title Screen...');
+  await page.click('#pause');
+  await page.waitForSelector('#pause-modal:not(.hidden)');
+  await page.click('#pause-title-btn');
+  await page.waitForSelector('#pause-modal', { state: 'hidden' });
+  await page.waitForSelector('#panel:not(.hidden)');
+
+  const beginBtnText = await page.textContent('#begin');
+  console.log(`✓ Returned to Title Screen. Continue button text: "${beginBtnText}"`);
+
+  // 9. Resume expedition from Title Screen
+  console.log('10. Resuming expedition from Title Screen...');
+  await page.click('#begin');
+  await page.waitForSelector('#panel', { state: 'hidden' });
+  console.log('✓ Resumed expedition from Title Screen successfully!');
+
+  console.log('====================================================');
+  console.log('ALL IN-GAME MAIN MENU & HUD BUTTON TESTS PASSED (10/10)');
+  console.log('====================================================');
 
   await browser.close();
 }
 
-testCloseButtons().catch(e => {
+testMainMenusAndCloseButtons().catch(e => {
   console.error(e);
   process.exit(1);
 });

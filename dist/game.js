@@ -666,7 +666,8 @@ function sync() {
 
   const isPlaying = state.mode === 'playing';
   $('pause').disabled = !isPlaying && state.mode !== 'paused';
-  $('pause').textContent = state.mode === 'paused' ? '▶' : 'Ⅱ';
+  $('pause').textContent = state.mode === 'paused' ? '▶ Resume' : '☰ Menu';
+  $('pause').setAttribute('aria-label', state.mode === 'paused' ? 'Resume Expedition' : 'Open Main Menu');
   document.body.classList.toggle('playing', isPlaying || state.mode === 'paused');
 
   // Trigger win or loss dialogs
@@ -853,7 +854,7 @@ function closeLevelMap() {
   if (origin === 'playing') {
     state.start();
   } else if (origin === 'paused') {
-    $('pause-modal').classList.remove('hidden');
+    openMainMenu();
   } else if (origin === 'completion') {
     $('completion-modal').classList.remove('hidden');
   } else if (origin === 'adventure') {
@@ -861,6 +862,50 @@ function closeLevelMap() {
   }
   sync();
   canvas.focus();
+}
+
+// In-Game Main Menu Logic & Live Status Dossier
+function openMainMenu() {
+  if (state.mode === 'playing') {
+    state.pause();
+  }
+  updateMainMenuDossier();
+  $('pause-modal').classList.remove('hidden');
+  $('map-modal').classList.add('hidden');
+  $('customize-modal').classList.add('hidden');
+  $('completion-modal').classList.add('hidden');
+  $('adventure-modal').classList.add('hidden');
+  sync();
+}
+
+function closeMainMenu() {
+  $('pause-modal').classList.add('hidden');
+  if (state.mode === 'paused') {
+    state.start();
+  }
+  sync();
+  canvas.focus();
+}
+
+function updateMainMenuDossier() {
+  const lvl = state.level;
+  if (!lvl) return;
+  const levelInfoEl = $('pause-level-info');
+  if (levelInfoEl) levelInfoEl.textContent = `${lvl.id}. ${lvl.name} — ${lvl.subtitle}`;
+  const gravityEl = $('pause-gravity-badge');
+  if (gravityEl) gravityEl.textContent = `g: ${lvl.gravity} m/s²`;
+  const energyEl = $('pause-energy');
+  if (energyEl) energyEl.textContent = `◇ ${state.collected.size} / ${state.crystalCount}`;
+  const livesEl = $('pause-lives');
+  if (livesEl) livesEl.textContent = '♥ '.repeat(Math.max(0, state.lives)).trim() || '—';
+  const timeEl = $('pause-time');
+  if (timeEl) timeEl.textContent = formatTime(state.time);
+  const relicEl = $('pause-relic');
+  if (relicEl) relicEl.textContent = state.relicCollected ? '★ Discovered' : 'Not Found';
+  const soundBtn = $('pause-sound-btn');
+  if (soundBtn) soundBtn.textContent = sound ? '🔊 Sound: On' : '🔇 Sound: Off';
+  const overlayBtn = $('pause-overlay-btn');
+  if (overlayBtn) overlayBtn.textContent = debugOverlayEnabled ? '🛡 Overlay: ON' : '🛡 Overlay: OFF';
 }
 
 function selectMapLevel(id) {
@@ -1014,7 +1059,7 @@ function closeCustomizeScreen() {
   } else if (origin === 'playing') {
     state.start();
   } else if (origin === 'paused') {
-    $('pause-modal').classList.remove('hidden');
+    openMainMenu();
   } else if (origin === 'completion') {
     $('completion-modal').classList.remove('hidden');
   } else if (origin === 'adventure') {
@@ -1242,30 +1287,30 @@ function setupEventListeners() {
 
   $('pause').onclick = () => {
     if (state.mode === 'playing') {
-      state.pause();
-      $('pause-modal').classList.remove('hidden');
+      openMainMenu();
     } else if (state.mode === 'paused') {
-      state.start();
-      $('pause-modal').classList.add('hidden');
+      closeMainMenu();
     }
-    sync();
   };
 
   $('sound').onclick = () => {
     sound = !sound;
     $('sound').textContent = sound ? 'Sound on' : 'Sound off';
     $('sound').setAttribute('aria-pressed', String(sound));
+    const pauseSoundBtn = $('pause-sound-btn');
+    if (pauseSoundBtn) pauseSoundBtn.textContent = sound ? '🔊 Sound: On' : '🔇 Sound: Off';
     chime(520);
   };
 
-  $('debug-overlay-btn').onclick = () => toggleCollisionOverlay();
-
-  // Pause menu buttons
-  $('pause-resume-btn').onclick = () => {
-    $('pause-modal').classList.add('hidden');
-    state.start();
-    sync();
+  $('debug-overlay-btn').onclick = () => {
+    toggleCollisionOverlay();
+    const pauseOverlayBtn = $('pause-overlay-btn');
+    if (pauseOverlayBtn) pauseOverlayBtn.textContent = showCollisionOverlay ? '🛡 Overlay: ON' : '🛡 Overlay: OFF';
   };
+
+  // In-Game Main Menu Handlers
+  $('close-pause-btn').onclick = closeMainMenu;
+  $('pause-resume-btn').onclick = closeMainMenu;
   $('pause-custom-btn').onclick = () => openCustomizeScreen('paused');
   $('pause-restart-btn').onclick = () => {
     $('pause-modal').classList.add('hidden');
@@ -1275,6 +1320,32 @@ function setupEventListeners() {
   $('pause-map-btn').onclick = () => {
     $('pause-modal').classList.add('hidden');
     openLevelMap('paused');
+  };
+  $('pause-title-btn').onclick = () => {
+    state.mode = 'ready';
+    $('pause-modal').classList.add('hidden');
+    $('panel').classList.remove('hidden');
+    const lvlName = state.level?.name || 'Crystal Garden';
+    $('begin').textContent = `Continue Expedition (${lvlName})`;
+    $('begin').disabled = false;
+    document.body.classList.remove('playing');
+    sync();
+  };
+  $('pause-sound-btn').onclick = () => {
+    sound = !sound;
+    $('sound').textContent = sound ? 'Sound on' : 'Sound off';
+    $('sound').setAttribute('aria-pressed', String(sound));
+    $('pause-sound-btn').textContent = sound ? '🔊 Sound: On' : '🔇 Sound: Off';
+    chime(520);
+  };
+  $('pause-overlay-btn').onclick = () => {
+    toggleCollisionOverlay();
+    $('pause-overlay-btn').textContent = debugOverlayEnabled ? '🛡 Overlay: ON' : '🛡 Overlay: OFF';
+  };
+  $('pause-modal').onclick = (e) => {
+    if (e.target === $('pause-modal')) {
+      closeMainMenu();
+    }
   };
 
   // Completion buttons
@@ -1357,12 +1428,12 @@ function setupEventListeners() {
         closeLevelMap();
       } else if (!$('completion-modal').classList.contains('hidden')) {
         $('completion-modal').classList.add('hidden');
+      } else if (!$('pause-modal').classList.contains('hidden')) {
+        closeMainMenu();
       } else if (state.mode === 'playing') {
-        state.pause();
-        $('pause-modal').classList.remove('hidden');
+        openMainMenu();
       } else if (state.mode === 'paused') {
-        state.start();
-        $('pause-modal').classList.add('hidden');
+        closeMainMenu();
       }
       sync();
     }
@@ -1377,7 +1448,9 @@ function setupEventListeners() {
     if (e.code === 'KeyO') {
       toggleCollisionOverlay();
     }
-    if (e.code === 'KeyR' && ['won', 'lost'].includes(state.mode)) {
+    if (e.code === 'KeyR' && (['won', 'lost'].includes(state.mode) || !$('pause-modal').classList.contains('hidden'))) {
+      $('pause-modal').classList.add('hidden');
+      state.reset();
       begin();
     }
     if (e.code === 'Space' && !keys.has('Space')) {
